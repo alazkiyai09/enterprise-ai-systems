@@ -63,6 +63,10 @@ class Settings(BaseSettings):
         default=None,
         description="Cohere API key for Cohere reranker (optional)",
     )
+    GLM_API_KEY: Optional[str] = Field(
+        default=None,
+        description="GLM (ZhipuAI) API key for GLM models",
+    )
 
     # ============================================================
     # Model Configuration
@@ -76,7 +80,7 @@ class Settings(BaseSettings):
         description="Model name for cross-encoder reranking",
     )
     LLM_MODEL: str = Field(
-        default="gpt-4-turbo",
+        default="glm-4-plus",
         description="LLM model for response generation",
     )
     LLM_TEMPERATURE: float = Field(

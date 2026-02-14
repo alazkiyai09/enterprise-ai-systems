@@ -333,9 +333,9 @@ class RAGChain:
         try:
             from zhipuai import ZhipuAI
 
-            api_key = settings.OPENAI_API_KEY  # Reuse or add GLM_API_KEY
+            api_key = settings.GLM_API_KEY
             if not api_key:
-                raise ValueError("API key is required for GLM provider")
+                raise ValueError("GLM_API_KEY is required for GLM provider")
 
             self._llm_client = ZhipuAI(api_key=api_key)
         except ImportError:

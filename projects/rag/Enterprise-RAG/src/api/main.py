@@ -113,7 +113,13 @@ async def lifespan(app: FastAPI):
         elif "llama" in model_lower or "mistral" in model_lower:
             llm_provider = "ollama"
         else:
-            llm_provider = "openai"  # default
+            # Default based on available API keys
+            if settings.GLM_API_KEY:
+                llm_provider = "glm"
+            elif settings.OPENAI_API_KEY:
+                llm_provider = "openai"
+            else:
+                llm_provider = "glm"  # fallback to glm
 
         rag_chain = create_rag_chain(
             retriever=hybrid_retriever,
