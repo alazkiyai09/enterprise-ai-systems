@@ -353,10 +353,14 @@ class ChromaVectorStore(VectorStoreBase):
             except Exception:
                 # Collection doesn't exist, create it
                 logger.info(f"Creating new collection: {self.collection_name}")
-                collection = self._client.create_collection(
-                    name=self.collection_name,
-                    metadata={"description": "Enterprise RAG document store"},
-                )
+                try:
+                    collection = self._client.create_collection(
+                        name=self.collection_name,
+                        metadata={"description": "Enterprise RAG document store"},
+                    )
+                except Exception:
+                    # Collection might have been created by another process
+                    collection = self._client.get_collection(name=self.collection_name)
 
                 # Cache the collection
                 self._collection_cache[self.collection_name] = collection

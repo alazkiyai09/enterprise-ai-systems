@@ -26,8 +26,13 @@ RUN apt-get update && apt-get install -y \
 # Copy requirements first for caching
 COPY requirements.txt .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir --user -r requirements.txt
+# Install Python dependencies with CPU-only PyTorch
+# Use extra-index-url to get torch from CPU index
+RUN pip install --no-cache-dir --prefix=/install \
+    --extra-index-url https://download.pytorch.org/whl/cpu \
+    -r requirements.txt \
+    && find /install -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true \
+    && find /install -type f -name "*.pyc" -delete 2>/dev/null || true
 
 
 # ============================================================
@@ -40,25 +45,25 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PYTHONPATH=/app/src \
-    PATH=/root/.local/bin:$PATH
+    PATH=/install/bin:$PATH \
+    PYTHONPATH=/install/lib/python3.11/site-packages:/app/src
 
 # Set working directory
 WORKDIR /app
 
-# Install runtime dependencies
-RUN apt-get update && apt-get install -y \
+# Install runtime dependencies only
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
 # Copy Python dependencies from builder
-COPY --from=builder /root/.local /root/.local
+COPY --from=builder /install /install
 
 # Copy application code
 COPY ./src /app/src
 COPY ./pyproject.toml /app/
-COPY ./README.md /app/ 2>/dev/null || true
+COPY README.md /app/
 
 # Create necessary directories with proper permissions
 RUN mkdir -p /app/data/documents /app/data/chroma /app/logs && \
@@ -67,7 +72,7 @@ RUN mkdir -p /app/data/documents /app/data/chroma /app/logs && \
 # Create non-root user for running the application
 RUN groupadd -r appuser && \
     useradd -m -u 1000 -r -g appuser appuser && \
-    chown -R appuser:appuser /app
+    chown -R appuser:appuser /app /install
 
 # Switch to non-root user
 USER appuser

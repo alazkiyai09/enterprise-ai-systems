@@ -28,7 +28,17 @@ from functools import wraps
 from pathlib import Path
 from typing import Any, Optional
 
-import jsonlog
+# Try to import json formatter - make it optional
+try:
+    from pythonjsonlogger import jsonlogger
+    JSON_LOGGING_AVAILABLE = True
+except ImportError:
+    try:
+        import jsonlog
+        jsonlogger = jsonlog
+        JSON_LOGGING_AVAILABLE = True
+    except ImportError:
+        JSON_LOGGING_AVAILABLE = False
 
 from src.config import settings
 # Import security filter from shared utilities

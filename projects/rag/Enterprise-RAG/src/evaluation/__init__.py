@@ -12,13 +12,17 @@ This module provides:
 """
 
 from src.evaluation.rag_evaluator import (
+    DEFAULT_TEST_SAMPLES,
     EvaluationResult,
     EvaluationSample,
     RAGEvaluator,
+    create_evaluator,
 )
 
 __all__ = [
     "RAGEvaluator",
     "EvaluationSample",
     "EvaluationResult",
+    "create_evaluator",
+    "DEFAULT_TEST_SAMPLES",
 ]

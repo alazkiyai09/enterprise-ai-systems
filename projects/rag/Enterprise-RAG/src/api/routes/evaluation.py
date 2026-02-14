@@ -8,12 +8,13 @@ Evaluation endpoints for the RAG API.
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel, Field
 
 from src.config import settings
 from src.evaluation import EvaluationSample, RAGEvaluator, DEFAULT_TEST_SAMPLES
 from src.logging_config import get_logger
+from src.api.auth import verify_api_key
 
 logger = get_logger(__name__)
 
@@ -73,7 +74,10 @@ class SingleEvaluationResponse(BaseModel):
 # ============================================================
 
 @router.post("/run", response_model=EvaluationResponse)
-async def run_evaluation(request: EvaluationRequest):
+async def run_evaluation(
+    request: EvaluationRequest,
+    api_key: str = Depends(verify_api_key),
+):
     """
     Run RAGAS evaluation on the RAG system.
 
@@ -144,7 +148,10 @@ async def run_evaluation(request: EvaluationRequest):
 
 
 @router.post("/evaluate-single", response_model=SingleEvaluationResponse)
-async def evaluate_single(request: SingleEvaluationRequest):
+async def evaluate_single(
+    request: SingleEvaluationRequest,
+    api_key: str = Depends(verify_api_key),
+):
     """
     Evaluate a single question-answer pair.
 
@@ -200,7 +207,7 @@ async def evaluate_single(request: SingleEvaluationRequest):
 
 
 @router.get("/report")
-async def generate_report():
+async def generate_report(api_key: str = Depends(verify_api_key)):
     """
     Generate an evaluation report.
 

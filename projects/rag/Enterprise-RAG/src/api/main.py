@@ -102,10 +102,23 @@ async def lifespan(app: FastAPI):
 
         # Initialize RAG chain
         logger.info("Initializing RAG chain...")
+        # Determine LLM provider from model name
+        model_lower = settings.LLM_MODEL.lower()
+        if model_lower.startswith("gpt"):
+            llm_provider = "openai"
+        elif model_lower.startswith("claude"):
+            llm_provider = "anthropic"
+        elif model_lower.startswith("glm"):
+            llm_provider = "glm"
+        elif "llama" in model_lower or "mistral" in model_lower:
+            llm_provider = "ollama"
+        else:
+            llm_provider = "openai"  # default
+
         rag_chain = create_rag_chain(
             retriever=hybrid_retriever,
             reranker=reranker,
-            llm_provider=settings.LLM_MODEL.split("-")[0] if "-" in settings.LLM_MODEL else "openai",
+            llm_provider=llm_provider,
         )
 
         # Initialize evaluator
@@ -190,7 +203,7 @@ app.add_middleware(
     allow_origins=origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
+    allow_headers=["Content-Type", "Authorization", "X-API-Key", "X-Request-ID"],
 )
 
 
@@ -199,12 +212,15 @@ app.add_middleware(
 # ============================================================
 
 try:
-    from shared.rate_limit import limiter, rate_limit_exception_handler, RateLimitExceeded
+    from src.api.rate_limit import limiter, rate_limit_exception_handler, RateLimitExceeded
+    from slowapi import _rate_limit_exceeded_handler
+    from slowapi.errors import RateLimitExceeded as SlowApiRateLimitExceeded
+
     app.state.limiter = limiter
-    app.add_exception_handler(RateLimitExceeded, rate_limit_exception_handler)
+    app.add_exception_handler(SlowApiRateLimitExceeded, rate_limit_exception_handler)
     logger.info("Rate limiting enabled")
-except ImportError:
-    logger.warning("Shared rate limiting module not available - rate limiting disabled")
+except ImportError as e:
+    logger.warning(f"Rate limiting module not available - rate limiting disabled: {e}")
 
 
 # ============================================================

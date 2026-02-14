@@ -380,6 +380,32 @@ class Settings(BaseSettings):
             )
         return v
 
+    @field_validator("SECRET_KEY")
+    @classmethod
+    def validate_secret_key(cls, v: str) -> str:
+        """Validate SECRET_KEY is not using insecure defaults in production."""
+        insecure_defaults = [
+            "change-this-secret-key-in-production",
+            "your-secret-key-change-this-in-production",
+            "your-secret-key-change-this",
+        ]
+        v_lower = v.lower().strip()
+        if v_lower in [d.lower() for d in insecure_defaults]:
+            env = os.getenv("ENVIRONMENT", "development").lower()
+            if env in ("production", "prod", "staging", "stage"):
+                raise ValueError(
+                    "SECRET_KEY must be changed from default value in production! "
+                    "Generate a secure key with: python -c \"import secrets; print(secrets.token_urlsafe(32))\""
+                )
+            import warnings
+            warnings.warn(
+                "SECRET_KEY is using a default value. This is insecure for production. "
+                "Set a secure SECRET_KEY environment variable.",
+                UserWarning,
+                stacklevel=2,
+            )
+        return v
+
     # ============================================================
     # Utility Properties
     # ============================================================

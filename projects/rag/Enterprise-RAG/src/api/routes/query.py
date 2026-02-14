@@ -8,12 +8,13 @@ Query endpoints for the RAG API.
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Request, status, Depends
 from pydantic import BaseModel, Field
 
 from src.config import settings
 from src.exceptions import format_error_for_api
 from src.logging_config import get_logger
+from src.api.auth import verify_api_key
 
 logger = get_logger(__name__)
 
@@ -78,7 +79,11 @@ class StreamQueryRequest(BaseModel):
 # ============================================================
 
 @router.post("/query", response_model=QueryResponse)
-async def query(http_request: Request, request: QueryRequest):
+async def query(
+    http_request: Request,
+    request: QueryRequest,
+    api_key: str = Depends(verify_api_key),
+):
     """
     Query the RAG system with a question.
 
@@ -162,7 +167,10 @@ async def query(http_request: Request, request: QueryRequest):
 
 
 @router.post("/query/stream")
-async def query_stream(request: StreamQueryRequest):
+async def query_stream(
+    request: StreamQueryRequest,
+    api_key: str = Depends(verify_api_key),
+):
     """
     Stream a query response in real-time.
 
@@ -212,7 +220,7 @@ async def query_stream(request: StreamQueryRequest):
 
 
 @router.post("/conversation/clear")
-async def clear_conversation():
+async def clear_conversation(api_key: str = Depends(verify_api_key)):
     """
     Clear the conversation history.
 
@@ -240,7 +248,7 @@ async def clear_conversation():
 
 
 @router.get("/conversation")
-async def get_conversation():
+async def get_conversation(api_key: str = Depends(verify_api_key)):
     """
     Get the conversation history.
 

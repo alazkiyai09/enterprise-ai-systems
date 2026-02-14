@@ -13,7 +13,10 @@ This module provides:
 - Cross-encoder reranking
 """
 
-from src.retrieval.embedding_service import EmbeddingService
+from src.retrieval.embedding_service import (
+    EmbeddingService,
+    create_embedding_service,
+)
 from src.retrieval.vector_store import (
     ChromaVectorStore,
     SearchResult,
@@ -22,10 +25,26 @@ from src.retrieval.vector_store import (
     create_vector_store,
     create_vector_store_from_settings,
 )
+from src.retrieval.sparse_retriever import (
+    BM25Retriever,
+    SparseSearchResult,
+    BM25Stats,
+    create_bm25_retriever,
+)
+from src.retrieval.reranker import (
+    CrossEncoderReranker,
+    RerankedSearchResult,
+)
+from src.retrieval.hybrid_retriever import (
+    HybridRetriever,
+    HybridSearchResult,
+    create_hybrid_retriever,
+)
 
 __all__ = [
     # Embedding service
     "EmbeddingService",
+    "create_embedding_service",
     # Vector store
     "VectorStoreBase",
     "ChromaVectorStore",
@@ -33,4 +52,16 @@ __all__ = [
     "VectorStoreStats",
     "create_vector_store",
     "create_vector_store_from_settings",
+    # Sparse retrieval (BM25)
+    "BM25Retriever",
+    "SparseSearchResult",
+    "BM25Stats",
+    "create_bm25_retriever",
+    # Reranker
+    "CrossEncoderReranker",
+    "RerankedSearchResult",
+    # Hybrid retriever
+    "HybridRetriever",
+    "HybridSearchResult",
+    "create_hybrid_retriever",
 ]

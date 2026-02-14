@@ -15,10 +15,10 @@ This package provides:
 - Streamlit demo interface
 
 Example:
-    >>> from src.core.rag_engine import RAGEngine
+    >>> from src.generation import create_rag_chain
     >>> from src.config import settings
-    >>> engine = RAGEngine(config=settings)
-    >>> response = engine.query("What is the company's refund policy?")
+    >>> rag_chain = create_rag_chain()
+    >>> response = rag_chain.query("What is the company's refund policy?")
     >>> print(response.answer)
 
 Author: AI Engineer
@@ -31,16 +31,18 @@ __author__ = "AI Engineer"
 __license__ = "MIT"
 
 # Import key classes for convenient access
-from src.core.rag_engine import RAGEngine
-from src.core.document_processor import DocumentProcessor
+from src.generation import RAGChain, create_rag_chain
+from src.ingestion import DocumentProcessor, create_processor_from_settings
 from src.config import settings
 
 __all__ = [
     "__version__",
     "__author__",
     "__license__",
-    "RAGEngine",
+    "RAGChain",
+    "create_rag_chain",
     "DocumentProcessor",
+    "create_processor_from_settings",
     "settings",
 ]
 

@@ -10,11 +10,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, File, HTTPException, UploadFile, status, Depends
 from pydantic import BaseModel, Field
 
 from src.config import settings
 from src.logging_config import get_logger
+from src.api.auth import verify_api_key
 
 logger = get_logger(__name__)
 
@@ -68,6 +69,7 @@ class DeleteResponse(BaseModel):
 @router.post("/ingest", response_model=IngestResponse)
 async def ingest_document(
     file: UploadFile = File(..., description="Document file (PDF, DOCX, MD, TXT)"),
+    api_key: str = Depends(verify_api_key),
 ):
     """
     Upload and ingest a document into the knowledge base.
@@ -207,7 +209,7 @@ async def ingest_document(
 
 
 @router.get("", response_model=DocumentsListResponse)
-async def list_documents():
+async def list_documents(api_key: str = Depends(verify_api_key)):
     """
     List all ingested documents.
 
@@ -248,7 +250,7 @@ async def list_documents():
 
 
 @router.delete("/{doc_id}", response_model=DeleteResponse)
-async def delete_document(doc_id: str):
+async def delete_document(doc_id: str, api_key: str = Depends(verify_api_key)):
     """
     Delete a document from the knowledge base.
 
@@ -299,7 +301,10 @@ async def delete_document(doc_id: str):
 
 
 @router.post("/batch-ingest")
-async def batch_ingest(files: list[UploadFile] = File(...)):
+async def batch_ingest(
+    files: list[UploadFile] = File(...),
+    api_key: str = Depends(verify_api_key),
+):
     """
     Batch ingest multiple documents.
 
