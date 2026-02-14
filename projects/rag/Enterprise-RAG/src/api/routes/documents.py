@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, File, HTTPException, UploadFile, status, Depends
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile, status, Depends
 from pydantic import BaseModel, Field
 
 from src.config import settings
@@ -68,6 +68,7 @@ class DeleteResponse(BaseModel):
 
 @router.post("/ingest", response_model=IngestResponse)
 async def ingest_document(
+    http_request: Request,
     file: UploadFile = File(..., description="Document file (PDF, DOCX, MD, TXT)"),
     api_key: str = Depends(verify_api_key),
 ):
@@ -97,11 +98,9 @@ async def ingest_document(
         Content-Type: multipart/form-data
         file: document.pdf
     """
-    from fastapi import Request
-
-    request_obj = Request.scope()["app"]
-    document_processor = getattr(request_obj.state, "document_processor", None)
-    rag_chain = getattr(request_obj.state, "rag_chain", None)
+    app = http_request.scope["app"]
+    document_processor = getattr(app.state, "document_processor", None)
+    rag_chain = getattr(app.state, "rag_chain", None)
 
     if document_processor is None or rag_chain is None:
         raise HTTPException(
@@ -120,7 +119,7 @@ async def ingest_document(
         )
 
     # Validate file type (both extension and MIME type)
-    file_ext = Path(file.filename).suffix.lower()
+    file_ext = Path(file.filename).suffix.lower().lstrip('.')
     supported_formats = settings.supported_formats_list
 
     if file_ext not in supported_formats:
@@ -209,7 +208,10 @@ async def ingest_document(
 
 
 @router.get("", response_model=DocumentsListResponse)
-async def list_documents(api_key: str = Depends(verify_api_key)):
+async def list_documents(
+    http_request: Request,
+    api_key: str = Depends(verify_api_key),
+):
     """
     List all ingested documents.
 
@@ -218,11 +220,10 @@ async def list_documents(api_key: str = Depends(verify_api_key)):
     Example:
         GET /api/v1/documents
     """
-    from fastapi import Request
     from collections import defaultdict
 
-    request_obj = Request.scope()["app"]
-    vector_store = getattr(request_obj.state, "vector_store", None)
+    app = http_request.scope["app"]
+    vector_store = getattr(app.state, "vector_store", None)
 
     if vector_store is None:
         raise HTTPException(
@@ -250,7 +251,11 @@ async def list_documents(api_key: str = Depends(verify_api_key)):
 
 
 @router.delete("/{doc_id}", response_model=DeleteResponse)
-async def delete_document(doc_id: str, api_key: str = Depends(verify_api_key)):
+async def delete_document(
+    http_request: Request,
+    doc_id: str,
+    api_key: str = Depends(verify_api_key),
+):
     """
     Delete a document from the knowledge base.
 
@@ -263,11 +268,9 @@ async def delete_document(doc_id: str, api_key: str = Depends(verify_api_key)):
     Example:
         DELETE /api/v1/documents/doc_abc123
     """
-    from fastapi import Request
-
-    request_obj = Request.scope()["app"]
-    vector_store = getattr(request_obj.state, "vector_store", None)
-    rag_chain = getattr(request_obj.state, "rag_chain", None)
+    app = http_request.scope["app"]
+    vector_store = getattr(app.state, "vector_store", None)
+    rag_chain = getattr(app.state, "rag_chain", None)
 
     if vector_store is None or rag_chain is None:
         raise HTTPException(
@@ -302,6 +305,7 @@ async def delete_document(doc_id: str, api_key: str = Depends(verify_api_key)):
 
 @router.post("/batch-ingest")
 async def batch_ingest(
+    http_request: Request,
     files: list[UploadFile] = File(...),
     api_key: str = Depends(verify_api_key),
 ):
@@ -318,11 +322,9 @@ async def batch_ingest(
         POST /api/v1/documents/batch-ingest
         Files: [doc1.pdf, doc2.docx, doc3.txt]
     """
-    from fastapi import Request
-
-    request_obj = Request.scope()["app"]
-    document_processor = getattr(request_obj.state, "document_processor", None)
-    rag_chain = getattr(request_obj.state, "rag_chain", None)
+    app = http_request.scope["app"]
+    document_processor = getattr(app.state, "document_processor", None)
+    rag_chain = getattr(app.state, "rag_chain", None)
 
     if document_processor is None or rag_chain is None:
         raise HTTPException(

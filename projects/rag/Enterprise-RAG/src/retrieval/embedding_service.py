@@ -451,7 +451,7 @@ class EmbeddingService:
 
                 # Embed uncached texts
                 if uncached_texts:
-                    new_embeddings = self._model.encode(
+                    new_embeddings = self.model.encode(
                         uncached_texts,
                         convert_to_numpy=True,
                         normalize_embeddings=self.normalize,

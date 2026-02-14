@@ -24,9 +24,10 @@ services:
       - CORS_ORIGINS=http://localhost:8501,http://localhost:3000
 
       # LLM Configuration
+      - GLM_API_KEY=${GLM_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - LLM_MODEL=${LLM_MODEL:-gpt-4o-mini}
+      - LLM_MODEL=${LLM_MODEL:-glm-4.7}
       - LLM_TEMPERATURE=${LLM_TEMPERATURE:-0.1}
       - LLM_MAX_TOKENS=${LLM_MAX_TOKENS:-1024}
 
@@ -135,11 +136,11 @@ services:
       # Persist vector data
       - ./data/qdrant:/qdrant/storage
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/6333'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     networks:
       - rag-network
     deploy:

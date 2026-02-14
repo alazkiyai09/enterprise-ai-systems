@@ -329,17 +329,21 @@ class RAGChain:
             raise ImportError("openai package is required for Ollama provider")
 
     def _load_glm_client(self) -> None:
-        """Load GLM (ZhipuAI) client."""
+        """Load GLM (ZhipuAI) client using Anthropic-compatible API."""
         try:
-            from zhipuai import ZhipuAI
+            from anthropic import Anthropic
 
             api_key = settings.GLM_API_KEY
             if not api_key:
                 raise ValueError("GLM_API_KEY is required for GLM provider")
 
-            self._llm_client = ZhipuAI(api_key=api_key)
+            # Use Anthropic-compatible endpoint for GLM
+            self._llm_client = Anthropic(
+                api_key=api_key,
+                base_url="https://api.z.ai/api/anthropic",
+            )
         except ImportError:
-            raise ImportError("zhipuai package is required for GLM provider")
+            raise ImportError("anthropic package is required for GLM provider")
 
     # ============================================================
     # Query Methods
@@ -742,20 +746,33 @@ Answer:"""
         self,
         messages: list[dict[str, str]],
     ) -> Tuple[str, Optional[dict[str, int]]]:
-        """Generate using GLM (ZhipuAI)."""
+        """Generate using GLM (ZhipuAI) via Anthropic-compatible API."""
         try:
-            response = self.llm_client.chat.completions.create(
-                model=self.model_name,  # e.g., "glm-4"
-                messages=messages,
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
-            )
+            # Extract system message if present
+            system_prompt = None
+            chat_messages = []
+            for msg in messages:
+                if msg["role"] == "system":
+                    system_prompt = msg["content"]
+                else:
+                    chat_messages.append(msg)
 
-            answer = response.choices[0].message.content
+            # Use Anthropic-style messages.create()
+            kwargs = {
+                "model": self.model_name,
+                "max_tokens": self.max_tokens,
+                "messages": chat_messages,
+            }
+            if system_prompt:
+                kwargs["system"] = system_prompt
+
+            response = self.llm_client.messages.create(**kwargs)
+
+            answer = response.content[0].text
             token_usage = {
-                "prompt_tokens": response.usage.prompt_tokens,
-                "completion_tokens": response.usage.completion_tokens,
-                "total_tokens": response.usage.total_tokens,
+                "prompt_tokens": response.usage.input_tokens,
+                "completion_tokens": response.usage.output_tokens,
+                "total_tokens": response.usage.input_tokens + response.usage.output_tokens,
             }
 
             return answer, token_usage

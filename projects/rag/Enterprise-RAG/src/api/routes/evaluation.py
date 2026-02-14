@@ -8,7 +8,7 @@ Evaluation endpoints for the RAG API.
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, Request, status, Depends
 from pydantic import BaseModel, Field
 
 from src.config import settings
@@ -75,7 +75,8 @@ class SingleEvaluationResponse(BaseModel):
 
 @router.post("/run", response_model=EvaluationResponse)
 async def run_evaluation(
-    request: EvaluationRequest,
+    http_request: Request,
+    eval_request: EvaluationRequest,
     api_key: str = Depends(verify_api_key),
 ):
     """
@@ -90,7 +91,7 @@ async def run_evaluation(
     If no custom samples provided, uses the default test dataset.
 
     Args:
-        request: Evaluation request with optional samples
+        eval_request: Evaluation request with optional samples
 
     Returns:
         Evaluation results with all metric scores
@@ -102,10 +103,8 @@ async def run_evaluation(
             "num_samples": 10
         }
     """
-    from fastapi import Request
-
-    request_obj = Request.scope()["app"]
-    rag_evaluator = getattr(request_obj.state, "rag_evaluator", None)
+    app = http_request.scope["app"]
+    rag_evaluator = getattr(app.state, "rag_evaluator", None)
 
     if rag_evaluator is None:
         raise HTTPException(
@@ -117,12 +116,12 @@ async def run_evaluation(
         logger.info("Starting RAGAS evaluation")
 
         # Get samples
-        if request.samples is None:
+        if eval_request.samples is None:
             # Use default samples
-            samples = DEFAULT_TEST_SAMPLES[: request.num_samples]
+            samples = DEFAULT_TEST_SAMPLES[: eval_request.num_samples]
         else:
             # Use custom samples
-            samples = [EvaluationSample(**s) for s in request.samples]
+            samples = [EvaluationSample(**s) for s in eval_request.samples]
 
         # Run evaluation
         result = rag_evaluator.evaluate_samples(samples, show_progress=True)
@@ -149,14 +148,15 @@ async def run_evaluation(
 
 @router.post("/evaluate-single", response_model=SingleEvaluationResponse)
 async def evaluate_single(
-    request: SingleEvaluationRequest,
+    http_request: Request,
+    eval_request: SingleEvaluationRequest,
     api_key: str = Depends(verify_api_key),
 ):
     """
     Evaluate a single question-answer pair.
 
     Args:
-        request: Single evaluation request
+        eval_request: Single evaluation request
 
     Returns:
         Metric scores for the single question
@@ -168,11 +168,9 @@ async def evaluate_single(
             "ground_truth": "Refunds take 5-7 business days."
         }
     """
-    from fastapi import Request
-
-    request_obj = Request.scope()["app"]
-    rag_chain = getattr(request_obj.state, "rag_chain", None)
-    rag_evaluator = getattr(request_obj.state, "rag_evaluator", None)
+    app = http_request.scope["app"]
+    rag_chain = getattr(app.state, "rag_chain", None)
+    rag_evaluator = getattr(app.state, "rag_evaluator", None)
 
     if rag_chain is None or rag_evaluator is None:
         raise HTTPException(
@@ -182,12 +180,12 @@ async def evaluate_single(
 
     try:
         # First generate answer
-        response = rag_chain.query(request.question)
+        response = rag_chain.query(eval_request.question)
 
         # Then evaluate
         scores = rag_evaluator.evaluate_single(
-            question=request.question,
-            ground_truth=request.ground_truth,
+            question=eval_request.question,
+            ground_truth=eval_request.ground_truth,
         )
 
         return SingleEvaluationResponse(
@@ -207,7 +205,10 @@ async def evaluate_single(
 
 
 @router.get("/report")
-async def generate_report(api_key: str = Depends(verify_api_key)):
+async def generate_report(
+    http_request: Request,
+    api_key: str = Depends(verify_api_key),
+):
     """
     Generate an evaluation report.
 
@@ -217,10 +218,9 @@ async def generate_report(api_key: str = Depends(verify_api_key)):
         GET /api/v1/evaluation/report
     """
     from fastapi import Response
-    from fastapi import Request
 
-    request_obj = Request.scope()["app"]
-    rag_evaluator = getattr(request_obj.state, "rag_evaluator", None)
+    app = http_request.scope["app"]
+    rag_evaluator = getattr(app.state, "rag_evaluator", None)
 
     if rag_evaluator is None:
         raise HTTPException(

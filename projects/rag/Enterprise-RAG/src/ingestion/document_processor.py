@@ -516,7 +516,7 @@ class DocumentProcessor:
 
         logger.info(
             f"Processing bytes: {filename}",
-            extra={"filename": filename, "file_type": file_type, "size": len(content)},
+            extra={"doc_filename": filename, "file_type": file_type, "size": len(content)},
         )
 
         try:
