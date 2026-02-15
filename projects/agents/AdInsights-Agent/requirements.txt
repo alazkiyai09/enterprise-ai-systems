@@ -2,15 +2,18 @@
 langgraph==0.2.45
 langchain==0.3.7
 langchain-openai==0.2.10
-langchain-core==0.3.15
+langchain-core==0.3.21
 langchain-community==0.3.5
+
+# Zhipu AI (GLM)
+zhipuai==2.1.5.20250825
 
 # OpenAI
 openai==1.54.4
 
 # Data Manipulation
 pandas==2.2.3
-numpy==2.1.3
+numpy==1.26.4
 
 # Statistical Analysis
 scipy==1.14.1
@@ -21,6 +24,7 @@ scikit-learn==1.5.2
 matplotlib==3.9.2
 plotly==5.24.1
 kaleido==0.2.1
+seaborn==0.13.2
 
 # Web Framework
 fastapi==0.115.5
@@ -31,6 +35,7 @@ python-multipart==0.0.12
 
 # Data Validation
 pydantic==2.10.1
+email-validator==2.2.0
 
 # Utilities
 python-dotenv==1.0.1
@@ -54,3 +59,8 @@ types-requests==2.32.0.20241016
 
 # Optional: For Excel export
 openpyxl==3.1.5
+
+# Security & Authentication (for shared modules)
+bcrypt==4.1.2
+python-jose[cryptography]==3.3.0
+slowapi==0.1.9

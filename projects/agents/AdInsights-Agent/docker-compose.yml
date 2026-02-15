@@ -9,17 +9,21 @@ services:
     ports:
       - "8000:8000"
     environment:
+      - ZHIPUAI_API_KEY=${ZHIPUAI_API_KEY:-}
+      - GLM_MODEL=${GLM_MODEL:-glm-5}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o}
       - APP_ENV=${APP_ENV:-production}
       - API_PORT=8000
       - ANOMALY_THRESHOLD=2.5
       - TREND_CONFIDENCE=0.95
+      - PYTHONPATH=/app
     volumes:
       - ./data/reports:/app/data/reports
       - ./data/charts:/app/data/charts
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
       timeout: 10s
       retries: 3

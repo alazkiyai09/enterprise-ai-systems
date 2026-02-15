@@ -18,6 +18,7 @@ from pathlib import Path
 import pandas as pd
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 from langchain_openai import ChatOpenAI
+from langchain_community.chat_models import ChatZhipuAI
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 from typing_extensions import Required
@@ -123,17 +124,30 @@ class AdInsightsAgent:
 
     @property
     def llm(self):
-        """Lazy-load LLM only when needed."""
+        """Lazy-load LLM only when needed. Supports GLM (primary) and OpenAI (fallback)."""
         if self._llm is None:
-            api_key = os.getenv("OPENAI_API_KEY")
-            if not api_key:
-                raise ValueError("OPENAI_API_KEY environment variable not set")
+            # Try GLM (Zhipu AI) first
+            zhipu_api_key = os.getenv("ZHIPUAI_API_KEY")
+            if zhipu_api_key and zhipu_api_key != "sk-your-zhipuai-api-key-here":
+                model = os.getenv("GLM_MODEL", "glm-5")
+                self._llm = ChatZhipuAI(
+                    model=model,
+                    temperature=self.temperature,
+                    api_key=zhipu_api_key,
+                )
+                return self._llm
 
-            self._llm = ChatOpenAI(
-                model=self.model_name,
-                temperature=self.temperature,
-                api_key=api_key,
-            )
+            # Fallback to OpenAI
+            openai_api_key = os.getenv("OPENAI_API_KEY")
+            if openai_api_key and openai_api_key != "sk-your-openai-api-key-here":
+                self._llm = ChatOpenAI(
+                    model=self.model_name,
+                    temperature=self.temperature,
+                    api_key=openai_api_key,
+                )
+                return self._llm
+
+            raise ValueError("No valid API key found. Set ZHIPUAI_API_KEY or OPENAI_API_KEY environment variable.")
         return self._llm
 
     def _build_graph(self) -> StateGraph:

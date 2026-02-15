@@ -2,19 +2,22 @@
 Analysis tools for the LangGraph agent.
 """
 
-from src.tools.data_tools import load_data, filter_data, aggregate_metrics
-from src.tools.trend_tools import detect_trends, analyze_seasonality
-from src.tools.anomaly_tools import detect_anomalies, find_outliers
-from src.tools.insight_tools import generate_insights, summarize_findings
+from src.tools.analysis_tools import (
+    fetch_campaign_metrics,
+    calculate_period_comparison,
+    detect_anomalies,
+    analyze_trend,
+    find_correlations,
+    compare_to_benchmark,
+    generate_chart,
+)
 
 __all__ = [
-    "load_data",
-    "filter_data",
-    "aggregate_metrics",
-    "detect_trends",
-    "analyze_seasonality",
+    "fetch_campaign_metrics",
+    "calculate_period_comparison",
     "detect_anomalies",
-    "find_outliers",
-    "generate_insights",
-    "summarize_findings",
+    "analyze_trend",
+    "find_correlations",
+    "compare_to_benchmark",
+    "generate_chart",
 ]

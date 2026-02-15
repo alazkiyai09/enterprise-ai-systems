@@ -7,6 +7,7 @@ WORKDIR /app
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -18,6 +19,9 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Copy shared modules from parent directory
+COPY shared/ shared/
+
 # Copy application code
 COPY src/ src/
 COPY data/ data/
@@ -28,7 +32,7 @@ RUN mkdir -p /app/data/reports /app/data/charts
 # Expose port
 EXPOSE 8000
 
-# Health check
+# Health check using Python (curl not installed in slim image)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
 

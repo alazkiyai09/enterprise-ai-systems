@@ -6,9 +6,10 @@ long-running background tasks and streaming responses.
 """
 
 import asyncio
+import logging
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, AsyncGenerator
 from pathlib import Path
 
@@ -341,7 +342,8 @@ app.add_middleware(
 )
 
 # Install security filter for logs
-install_security_filter()
+logger = logging.getLogger(__name__)
+install_security_filter(logger)
 
 # Register error handlers
 register_error_handlers(app)
@@ -364,8 +366,10 @@ def get_agent() -> AdInsightsAgent:
     global _agent_instance
 
     if _agent_instance is None:
+        # Use GLM model if available, otherwise fallback to OpenAI model
+        model = os.getenv("GLM_MODEL") or os.getenv("OPENAI_MODEL", "glm-5")
         _agent_instance = AdInsightsAgent(
-            model=os.getenv("OPENAI_MODEL", "gpt-4o"),
+            model=model,
             temperature=0.0,
         )
 
@@ -513,8 +517,8 @@ user_store = InMemoryUserStore()
 @app.post("/auth/register", tags=["Authentication"])
 @limiter.limit("10/hour")
 async def register(
-    user_data: UserCreate,
     request: Request,
+    user_data: UserCreate,
 ):
     """Register a new user."""
     try:
@@ -538,9 +542,9 @@ async def register(
 @app.post("/auth/login", tags=["Authentication"])
 @limiter.limit("20/minute")
 async def login(
+    request: Request,
     username: str = Form(...),
     password: str = Form(...),
-    request: Request = None,
 ):
     """Login and receive access token."""
     from shared.auth import authenticate_user, login_user
@@ -560,8 +564,8 @@ async def login(
 @app.post("/auth/refresh", tags=["Authentication"])
 @limiter.limit("30/minute")
 async def refresh(
+    request: Request,
     refresh_token: str = Body(..., embed=True),
-    request: Request = None,
 ):
     """Refresh access token."""
     from shared.auth import refresh_user_token
@@ -578,7 +582,7 @@ async def refresh(
 
 @app.get("/auth/me", tags=["Authentication"])
 @limiter.limit("60/minute")
-async def get_current_user_info(current_user: TokenData = Depends(get_current_user)):
+async def get_current_user_info(request: Request, current_user: TokenData = Depends(get_current_user)):
     """Get current user information."""
     user = await user_store.get_user_by_id(current_user.user_id)
     if not user:
@@ -643,9 +647,9 @@ async def health_check():
 @app.post("/analyze", response_model=AnalysisResponse, status_code=status.HTTP_202_ACCEPTED)
 @limiter.limit("10/minute")
 async def analyze_campaign(
-    request: AnalysisRequest,
+    request: Request,
+    analysis_request: AnalysisRequest,
     background_tasks: BackgroundTasks,
-    http_request: Request = None,
 ):
     """
     Submit a campaign analysis job.
@@ -665,7 +669,7 @@ async def analyze_campaign(
     Returns immediately with job_id for tracking.
     """
     # Create job
-    job_id = job_store.create_job(request)
+    job_id = job_store.create_job(analysis_request)
 
     # Get agent
     agent = get_agent()
@@ -674,7 +678,7 @@ async def analyze_campaign(
     background_tasks.add_task(
         run_analysis_job,
         job_id,
-        request,
+        analysis_request,
         agent,
     )
 
