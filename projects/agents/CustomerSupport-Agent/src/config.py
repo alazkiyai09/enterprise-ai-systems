@@ -35,6 +35,11 @@ class Settings(BaseSettings):
     # API Keys
     openai_api_key: str = Field(default="test-key")
 
+    # LLM Configuration (supports OpenAI-compatible and Anthropic-compatible APIs)
+    llm_base_url: str = Field(default="https://api.openai.com/v1")
+    llm_model_name: str = Field(default="gpt-4o-mini")
+    llm_provider: str = Field(default="openai")  # Options: openai, anthropic
+
     # CORS
     cors_origins: List[str] = Field(
         default_factory=lambda: ["http://localhost:3000", "http://localhost:8000"]

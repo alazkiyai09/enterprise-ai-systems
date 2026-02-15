@@ -14,10 +14,13 @@ from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, TypedDict
 
 from langchain_openai import ChatOpenAI
+from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langgraph.graph import StateGraph, END
-from langgraph.graph.state import CompiledStateGraph
+# CompiledStateGraph type hint - use Any for compatibility
+from typing import Any
+CompiledStateGraph = Any  # type: ignore
 
 from ..config import settings
 from ..knowledge.faq_store import FAQStore, create_faq_store
@@ -122,7 +125,7 @@ When responding:
 
     def __init__(
         self,
-        model_name: str = "gpt-4o-mini",
+        model_name: str = None,
         temperature: float = 0.7,
         enable_memory: bool = True,
         enable_sentiment: bool = True
@@ -131,23 +134,37 @@ When responding:
         Initialize the support agent.
 
         Args:
-            model_name: OpenAI model to use
+            model_name: LLM model to use (defaults to settings.llm_model_name)
             temperature: Response randomness (0-1)
             enable_memory: Whether to use conversation memory
             enable_sentiment: Whether to use sentiment analysis
         """
-        self.model_name = model_name
+        self.model_name = model_name or settings.llm_model_name
         self.temperature = temperature
         self.enable_memory = enable_memory
         self.enable_sentiment = enable_sentiment
 
-        # Initialize LLM
-        self.llm = ChatOpenAI(
-            model=model_name,
-            temperature=temperature,
-            api_key=settings.openai_api_key,
-            request_timeout=30.0
-        )
+        # Initialize LLM based on provider (supports OpenAI and Anthropic-compatible APIs)
+        provider = getattr(settings, 'llm_provider', 'openai').lower()
+
+        if provider == 'anthropic':
+            # Use Anthropic-compatible API (e.g., Zhipu AI's GLM via Anthropic endpoint)
+            self.llm = ChatAnthropic(
+                model=self.model_name,
+                temperature=temperature,
+                api_key=settings.openai_api_key,
+                anthropic_api_url=settings.llm_base_url,
+                timeout=30.0
+            )
+        else:
+            # Use OpenAI-compatible API
+            self.llm = ChatOpenAI(
+                model=self.model_name,
+                temperature=temperature,
+                api_key=settings.openai_api_key,
+                base_url=settings.llm_base_url,
+                request_timeout=30.0
+            )
 
         # Initialize components
         self.faq_store = create_faq_store()

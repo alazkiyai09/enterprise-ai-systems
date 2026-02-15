@@ -3,11 +3,11 @@ python-dotenv==1.0.0
 pydantic==2.5.0
 pydantic-settings==2.1.0
 
-# LangChain & LangGraph
-langchain==0.1.0
-langchain-openai==0.0.2
-langchain-community==0.0.10
-langgraph==0.0.20
+# LangChain & LangGraph (newer compatible versions)
+langchain==0.2.1
+langchain-openai==0.1.7
+langchain-anthropic==0.1.15
+langgraph==0.0.55
 
 # Vector Store & Embeddings
 chromadb==0.4.22
