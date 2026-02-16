@@ -15,6 +15,18 @@ from datetime import datetime
 from unittest.mock import Mock, patch, AsyncMock
 import json
 import uuid
+import tempfile
+import os
+
+# ============================================================================
+# Fixtures
+# ============================================================================
+
+@pytest.fixture
+def temp_storage_path():
+    """Create a temporary directory for test storage."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        yield tmpdir
 
 # ============================================================================
 # Template Management Tests
@@ -23,11 +35,11 @@ import uuid
 class TestTemplateManagement:
     """Test prompt template management functionality."""
 
-    def test_create_template(self):
+    def test_create_template(self, temp_storage_path):
         """Test creating a new prompt template."""
         from src.prompt_optimizer.templates import create_template_manager
 
-        manager = create_template_manager()
+        manager = create_template_manager(storage_path=os.path.join(temp_storage_path, "templates"))
         unique_name = f"test_template_{uuid.uuid4().hex[:8]}"
 
         template = manager.create_template(
@@ -43,11 +55,11 @@ class TestTemplateManagement:
         assert template.template_string == "You are a {{role}}. Task: {{task}}."
         assert set(template.variables) == {"role", "task"}
 
-    def test_template_versioning(self):
+    def test_template_versioning(self, temp_storage_path):
         """Test template versioning."""
         from src.prompt_optimizer.templates import create_template_manager
 
-        manager = create_template_manager()
+        manager = create_template_manager(storage_path=os.path.join(temp_storage_path, "templates"))
         base_name = f"versioned_template_{uuid.uuid4().hex[:8]}"
 
         # Create v1
@@ -65,11 +77,11 @@ class TestTemplateManagement:
         assert v1.template_string != v2.template_string
         assert v1.name != v2.name
 
-    def test_template_rendering(self):
+    def test_template_rendering(self, temp_storage_path):
         """Test rendering templates with variables."""
         from src.prompt_optimizer.templates import create_template_manager
 
-        manager = create_template_manager()
+        manager = create_template_manager(storage_path=os.path.join(temp_storage_path, "templates"))
         unique_name = f"render_test_{uuid.uuid4().hex[:8]}"
 
         template = manager.create_template(
@@ -84,11 +96,11 @@ class TestTemplateManagement:
 
         assert rendered.content == "You are a expert. Your task: analyze."
 
-    def test_variable_extraction(self):
+    def test_variable_extraction(self, temp_storage_path):
         """Test extraction of variables from template."""
         from src.prompt_optimizer.templates import create_template_manager
 
-        manager = create_template_manager()
+        manager = create_template_manager(storage_path=os.path.join(temp_storage_path, "templates"))
         unique_name = f"var_extract_{uuid.uuid4().hex[:8]}"
 
         template = manager.create_template(
@@ -98,11 +110,11 @@ class TestTemplateManagement:
 
         assert set(template.variables) == {"var1", "var2", "var3"}
 
-    def test_template_validation(self):
+    def test_template_validation(self, temp_storage_path):
         """Test template validation."""
         from src.prompt_optimizer.templates import create_template_manager
 
-        manager = create_template_manager()
+        manager = create_template_manager(storage_path=os.path.join(temp_storage_path, "templates"))
         unique_name_valid = f"valid_template_{uuid.uuid4().hex[:8]}"
 
         # Valid template
