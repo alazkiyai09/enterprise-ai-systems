@@ -14,7 +14,7 @@ import json
 import logging
 import re
 
-from jinja2 import Environment, BaseLoader, meta, TemplateSyntaxError, UndefinedError
+from jinja2 import Environment, BaseLoader, meta, TemplateSyntaxError, UndefinedError, Undefined
 
 logger = logging.getLogger(__name__)
 
@@ -381,7 +381,7 @@ class TemplateManager:
 
         # Render
         try:
-            jinja_template = self.env.from_string(template.template_string, undefined=Strict if strict else Undefined)
+            jinja_template = self.env.from_string(template.template_string)
             content = jinja_template.render(**variables)
         except Exception as e:
             raise ValueError(f"Template rendering failed: {e}")

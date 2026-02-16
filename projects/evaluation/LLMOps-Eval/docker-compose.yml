@@ -29,13 +29,15 @@ services:
       # API Configuration
       - API_HOST=0.0.0.0
       - API_PORT=8000
-      - CORS_ORIGINS=http://localhost:8502,http://localhost:3001
 
       # API Keys (load from .env file)
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - COHERE_API_KEY=${COHERE_API_KEY:-}
       - HUGGINGFACE_API_KEY=${HUGGINGFACE_API_KEY:-}
+      - GLM_API_KEY=${GLM_API_KEY:-}
+      - GLM_API_URL=${GLM_API_URL:-https://open.bigmodel.cn/api/paas/v4}
+      - GLM_MODEL_NAME=${GLM_MODEL_NAME:-glm-4-flash}
 
       # Database
       - SQLITE_DB_PATH=/app/data/results.db
@@ -76,13 +78,7 @@ services:
 
     restart: unless-stopped
 
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-
+    
     depends_on:
       - prometheus
 
@@ -120,7 +116,7 @@ services:
     restart: unless-stopped
 
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/8501'"]
       interval: 30s
       timeout: 10s
       retries: 3

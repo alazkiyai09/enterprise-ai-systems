@@ -280,7 +280,7 @@ app = FastAPI(
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=settings.cors_origins_field,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -519,8 +519,11 @@ async def get_evaluation(evaluation_id: str):
         if result:
             return result.to_dict()
 
-    # Return status if not complete
-    return EvaluationStatusResponse(**evaluation)
+    # Return status if not complete - map 'id' to 'evaluation_id'
+    response_data = {**evaluation}
+    if "id" in response_data:
+        response_data["evaluation_id"] = response_data.pop("id")
+    return EvaluationStatusResponse(**response_data)
 
 
 @app.get(
@@ -541,15 +544,20 @@ async def get_evaluation_status(evaluation_id: str):
 
     # Calculate estimated time remaining
     estimated_time = None
-    if evaluation["status"] == "running" and evaluation["completed_tests"] > 0:
+    if evaluation["status"] == "running" and evaluation.get("completed_tests", 0) > 0:
         elapsed = datetime.utcnow() - datetime.fromisoformat(evaluation["start_time"])
         rate = evaluation["completed_tests"] / elapsed.total_seconds()
-        remaining = evaluation["total_tests"] - evaluation["completed_tests"]
+        remaining = evaluation.get("total_tests", 0) - evaluation["completed_tests"]
         if rate > 0:
             estimated_time = remaining / rate
 
+    # Map 'id' to 'evaluation_id' for response
+    response_data = {**evaluation}
+    if "id" in response_data:
+        response_data["evaluation_id"] = response_data.pop("id")
+
     return EvaluationStatusResponse(
-        **evaluation,
+        **response_data,
         estimated_time_remaining=estimated_time,
     )
 
@@ -647,60 +655,60 @@ async def list_datasets():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post(
-    "/datasets",
-    status_code=status.HTTP_201_CREATED,
-    tags=["Datasets"],
-)
-async def upload_dataset(
-    request: DatasetUploadRequest,
-    file: UploadFile = File(...),
-):
-    """
-    Upload a new dataset.
-
-    Accepts YAML or JSON dataset files.
-    """
-    try:
-        # Read file content
-        content = await file.read()
-
-        # Parse based on format
-        if request.format.lower() in ["yaml", "yml"]:
-            dataset = dataset_manager.create_from_string(
-                content.decode("utf-8"),
-                format="yaml",
-            )
-        elif request.format.lower() == "json":
-            dataset = dataset_manager.create_from_string(
-                content.decode("utf-8"),
-                format="json",
-            )
-        else:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Unsupported format: {request.format}",
-            )
-
-        # Update metadata
-        dataset.name = request.name
-        dataset.version = request.version
-        dataset.description = request.description
-
-        # Save dataset
-        path = dataset_manager.save_dataset(dataset)
-
-        return {
-            "message": "Dataset uploaded successfully",
-            "name": dataset.name,
-            "version": dataset.version,
-            "test_cases": dataset.test_case_count,
-            "path": str(path),
-        }
-
-    except Exception as e:
-        logger.error(f"Error uploading dataset: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+# @app.post(
+#     "/datasets",
+#     status_code=status.HTTP_201_CREATED,
+#     tags=["Datasets"],
+# )
+# async def upload_dataset(
+#     request: DatasetUploadRequest,
+#     file: UploadFile = File(...),
+# ):
+#     """
+#     Upload a new dataset.
+#
+#     Accepts YAML or JSON dataset files.
+#     """
+#     try:
+#         # Read file content
+#         content = await file.read()
+#
+#         # Parse based on format
+#         if request.format.lower() in ["yaml", "yml"]:
+#             dataset = dataset_manager.create_from_string(
+#                 content.decode("utf-8"),
+#                 format="yaml",
+#             )
+#         elif request.format.lower() == "json":
+#             dataset = dataset_manager.create_from_string(
+#                 content.decode("utf-8"),
+#                 format="json",
+#             )
+#         else:
+#             raise HTTPException(
+#                 status_code=400,
+#                 detail=f"Unsupported format: {request.format}",
+#             )
+#
+#         # Update metadata
+#         dataset.name = request.name
+#         dataset.version = request.version
+#         dataset.description = request.description
+#
+#         # Save dataset
+#         path = dataset_manager.save_dataset(dataset)
+#
+#         return {
+#             "message": "Dataset uploaded successfully",
+#             "name": dataset.name,
+#             "version": dataset.version,
+#             "test_cases": dataset.test_case_count,
+#             "path": str(path),
+#         }
+#
+#     except Exception as e:
+#         logger.error(f"Error uploading dataset: {e}")
+#         raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.get("/datasets/{dataset_name}", tags=["Datasets"])

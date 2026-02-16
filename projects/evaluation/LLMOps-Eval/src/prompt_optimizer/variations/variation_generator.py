@@ -279,7 +279,7 @@ class InstructionRephraseStrategy(BaseVariationStrategy):
         ],
         "write": [
             "compose", "create", "draft", "generate", "produce",
-            "compose, "author", "craft",
+            "author", "craft",
         ],
         "list": [
             "enumerate", "itemize", "name", "specify", "detail",
@@ -402,7 +402,7 @@ class InstructionRephraseStrategy(BaseVariationStrategy):
         # Find replaceable words
         for word in words:
             if word in self.SYNONYMS:
-                for i, synonym in enumerate(self.SYNONMS[word][:num_variations]):
+                for i, synonym in enumerate(self.SYNONYMS[word][:num_variations]):
                     variation = instruction.replace(word, synonym, 1)
                     variations.append({
                         "synonym_word": word,
@@ -522,7 +522,7 @@ class FewShotSelectionStrategy(BaseVariationStrategy):
                 tags.update(ex.get("tags", []))
 
             # Length variance
-            lengths = [len(str(ex.get("input", "") + str(ex.get("output", ""))) for ex in selected]
+            lengths = [len(str(ex.get("input", "")) + str(ex.get("output", ""))) for ex in selected]
             length_var = max(lengths) - min(lengths) if lengths else 0
 
             return len(categories) * 2 + len(tags) + length_var
@@ -551,7 +551,7 @@ class FewShotOrderStrategy(BaseVariationStrategy):
         "sort_by_output_length": lambda ex: sorted(ex, key=lambda x: len(str(x.get("output", "")))),
         "sort_by_difficulty": lambda ex: sorted(ex, key=lambda x: x.get("metadata", {}).get("difficulty", 5)),
         "alternate_categories": lambda ex: [],
-        "random": lambda ex, seed=seed: random.Random(seed).sample(ex, len(ex)),
+        "random": lambda ex: random.sample(ex, len(ex)),
     }
 
     def generate_variations(
@@ -1309,7 +1309,7 @@ def create_variation_generator(
     """
     return VariationGenerator(
         seed=seed,
-        max_variations=max_variations,
+        max_variations_per_strategy=max_variations,
         enable_temperature_sweeps=enable_temperature_sweeps,
     )
 

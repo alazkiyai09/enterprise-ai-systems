@@ -793,6 +793,216 @@ class OllamaProvider(LLMProvider):
         return 0.0
 
 
+class GLMProvider(LLMProvider):
+    """
+    GLM (Zhipu AI) provider using Anthropic-compatible API.
+
+    Supports GLM-4, GLM-4-flash, and other Zhipu AI models.
+    API Documentation: https://open.bigmodel.cn/dev/api
+
+    Can be accessed via Anthropic SDK compatible endpoint:
+    - International: https://api.z.ai/api/anthropic
+    - China mainland: https://open.bigmodel.cn/api/anthropic
+    """
+
+    # Use Anthropic-compatible endpoint (international)
+    BASE_URL = "https://api.z.ai/api/anthropic"
+    # Alternative: China mainland endpoint
+    # BASE_URL = "https://open.bigmodel.cn/api/anthropic"
+
+    PRICING: dict[str, dict[str, float]] = {
+        "glm-4": {"input": 0.0001, "output": 0.0001},
+        "glm-4-flash": {"input": 0.00001, "output": 0.00001},
+        "glm-4-plus": {"input": 0.00005, "output": 0.00005},
+        "glm-4.5": {"input": 0.00005, "output": 0.00005},
+        "glm-4.5-air": {"input": 0.00001, "output": 0.00001},
+        "glm-4.6": {"input": 0.00005, "output": 0.00005},
+        "glm-4.7": {"input": 0.00005, "output": 0.00005},
+        "glm-5": {"input": 0.0001, "output": 0.0001},
+        "glm-3-turbo": {"input": 0.00001, "output": 0.00001},
+    }
+
+    def __init__(
+        self,
+        model: str = "glm-4-flash",
+        api_key: Optional[str] = None,
+        base_url: Optional[str] = None,
+        timeout: int = 120,
+        max_retries: int = 3,
+    ):
+        """
+        Initialize GLM provider.
+
+        Args:
+            model: Model identifier (default: glm-4-flash)
+            api_key: Zhipu AI API key
+            base_url: Custom API base URL (optional)
+                - International: https://api.z.ai/api/anthropic
+                - China: https://open.bigmodel.cn/api/anthropic
+            timeout: Request timeout in seconds
+            max_retries: Maximum retry attempts
+        """
+        super().__init__(model, api_key, timeout, max_retries)
+
+        if not self.api_key:
+            raise ValueError("GLM API key is required")
+
+        self.base_url = (base_url or self.BASE_URL).rstrip("/")
+        self._tokenizer = None
+
+    @property
+    def name(self) -> str:
+        """Get provider name."""
+        return "glm"
+
+    @property
+    def tokenizer(self):
+        """Lazy-load tiktoken tokenizer (uses cl100k_base as approximation)."""
+        if self._tokenizer is None:
+            if tiktoken is None:
+                raise ImportError("tiktoken is required for token counting")
+            self._tokenizer = tiktoken.get_encoding("cl100k_base")
+        return self._tokenizer
+
+    @with_retry(max_retries=3)
+    async def generate(
+        self,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        temperature: float = 0.0,
+        max_tokens: int = 1000,
+        **kwargs: Any,
+    ) -> LLMResponse:
+        """Generate response using GLM API (Anthropic-compatible)."""
+        start_time = time.perf_counter()
+
+        # Build request payload (Anthropic-compatible format)
+        payload = {
+            "model": self.model,
+            "max_tokens": max_tokens,
+            "messages": [
+                {"role": "user", "content": prompt}
+            ],
+        }
+
+        if system_prompt:
+            payload["system"] = system_prompt
+
+        if temperature > 0:
+            payload["temperature"] = temperature
+
+        headers = {
+            "x-api-key": self.api_key,
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+        }
+
+        url = f"{self.base_url}/v1/messages"
+        async with self.session.post(url, json=payload, headers=headers) as response:
+            if response.status != 200:
+                error_text = await response.text()
+                raise RuntimeError(f"GLM API error: {response.status} - {error_text}")
+            data = await response.json()
+
+        # Parse response (Anthropic-compatible format)
+        content_blocks = data.get("content", [])
+        if not content_blocks:
+            raise RuntimeError("GLM API returned no content")
+
+        # Extract text from content blocks
+        content = ""
+        for block in content_blocks:
+            if block.get("type") == "text":
+                content += block.get("text", "")
+
+        latency = (time.perf_counter() - start_time) * 1000
+
+        # Token counts
+        usage = data.get("usage", {})
+        input_tokens = usage.get("input_tokens", 0)
+        output_tokens = usage.get("output_tokens", 0)
+        total_tokens = input_tokens + output_tokens
+
+        # Calculate cost
+        cost = self.estimate_cost(input_tokens, output_tokens)
+
+        return LLMResponse(
+            content=content,
+            model=self.model,
+            provider=self.name,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            total_tokens=total_tokens,
+            latency_ms=latency,
+            cost_usd=cost,
+            raw_response=data,
+            finish_reason=data.get("stop_reason"),
+        )
+
+    @with_retry(max_retries=3)
+    async def generate_stream(
+        self,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        temperature: float = 0.0,
+        max_tokens: int = 1000,
+        **kwargs: Any,
+    ) -> AsyncGenerator[str, None]:
+        """Generate streaming response from GLM API (Anthropic-compatible)."""
+        payload = {
+            "model": self.model,
+            "max_tokens": max_tokens,
+            "messages": [
+                {"role": "user", "content": prompt}
+            ],
+            "stream": True,
+        }
+
+        if system_prompt:
+            payload["system"] = system_prompt
+
+        if temperature > 0:
+            payload["temperature"] = temperature
+
+        headers = {
+            "x-api-key": self.api_key,
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+        }
+
+        url = f"{self.base_url}/v1/messages"
+        async with self.session.post(url, json=payload, headers=headers) as response:
+            response.raise_for_status()
+            async for line in response.content:
+                line = line.decode("utf-8").strip()
+                if line.startswith("data: "):
+                    data_str = line[6:]
+                    if data_str == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(data_str)
+                        # Anthropic stream format
+                        if chunk.get("type") == "content_block_delta":
+                            delta = chunk.get("delta", {})
+                            if delta.get("type") == "text_delta":
+                                content = delta.get("text", "")
+                                if content:
+                                    yield content
+                    except json.JSONDecodeError:
+                        continue
+
+    def count_tokens(self, text: str) -> int:
+        """Count tokens using tiktoken."""
+        return len(self.tokenizer.encode(text))
+
+    def estimate_cost(self, input_tokens: int, output_tokens: int) -> float:
+        """Estimate cost based on token usage."""
+        pricing = self.PRICING.get(self.model, {"input": 0.0001, "output": 0.0001})
+        input_cost = (input_tokens / 1000) * pricing["input"]
+        output_cost = (output_tokens / 1000) * pricing["output"]
+        return input_cost + output_cost
+
+
 def create_provider(
     provider: str,
     model: str,
@@ -825,6 +1035,7 @@ def create_provider(
         "openai": OpenAIProvider,
         "anthropic": AnthropicProvider,
         "ollama": OllamaProvider,
+        "glm": GLMProvider,
     }
 
     provider_class = providers.get(provider.lower())
@@ -852,5 +1063,6 @@ __all__ = [
     "OpenAIProvider",
     "AnthropicProvider",
     "OllamaProvider",
+    "GLMProvider",
     "create_provider",
 ]

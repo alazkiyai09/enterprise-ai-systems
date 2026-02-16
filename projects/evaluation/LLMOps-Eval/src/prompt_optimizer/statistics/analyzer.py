@@ -7,7 +7,7 @@ power analysis, and sample size recommendations.
 """
 
 from dataclasses import dataclass
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Any
 import numpy as np
 from scipy import stats
 from scipy.stats import norm
