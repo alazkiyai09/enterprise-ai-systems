@@ -429,7 +429,7 @@ class FewShotSelectionStrategy(BaseVariationStrategy):
         self,
         base_prompt: str,
         num_variations: int,
-        examples: List[Dict[str, Any]],
+        examples: Optional[List[Dict[str, Any]]] = None,
         examples_per_prompt: int = 3,
         selection_method: str = "diverse",
         **kwargs: Any,
@@ -440,7 +440,7 @@ class FewShotSelectionStrategy(BaseVariationStrategy):
         Args:
             base_prompt: Original prompt
             num_variations: Number of variations
-            examples: Pool of available examples
+            examples: Pool of available examples (required for this strategy)
             examples_per_prompt: How many examples per variation
             selection_method: How to select examples (diverse, random, sequential)
 
@@ -486,6 +486,37 @@ class FewShotSelectionStrategy(BaseVariationStrategy):
             })
 
         return variations
+
+    def apply_variation(
+        self,
+        base_prompt: str,
+        params: Dict[str, Any],
+        variables: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """
+        Apply few-shot examples to a base prompt.
+
+        Args:
+            base_prompt: Original prompt content
+            params: Variation parameters containing 'examples' list
+            variables: Optional variables for template rendering
+
+        Returns:
+            Modified prompt content with few-shot examples prepended
+        """
+        examples = params.get("examples", [])
+
+        # Format examples as few-shot prompt
+        few_shot_text = ""
+        for ex in examples:
+            input_text = ex.get("input", "")
+            output_text = ex.get("output", "")
+            few_shot_text += f"Input: {input_text}\nOutput: {output_text}\n\n"
+
+        # Combine with base prompt
+        if few_shot_text:
+            return f"{few_shot_text}Now, please respond to the following:\n{base_prompt}"
+        return base_prompt
 
     def _n_combinations(self, n: int, k: int) -> int:
         """Calculate number of combinations."""
@@ -1256,7 +1287,7 @@ class VariationGenerator:
                         prompt1, var2_params[0]
                     )
 
-                    combined = PromptVariation(
+                    combined_var = PromptVariation(
                         id=f"combined_{strat1.value}_{strat2.value}_{combo_count}",
                         base_template_id="base",
                         strategy=VariationStrategy.INSTRUCTION_REPHRASE,  # Placeholder
@@ -1270,7 +1301,7 @@ class VariationGenerator:
                         ],
                         generation_seed=self.seed,
                     )
-                    combined.append(combined)
+                    combined.append(combined_var)
                     combo_count += 1
 
         return combined

@@ -232,7 +232,7 @@ class TestExactMatchMetric:
 
     def test_exact_match_fail(self):
         """Test exact match that fails."""
-        metric = ExactMatchMetric(threshold=1.0)
+        metric = ExactMatchMetric(threshold=1.0, case_sensitive=True)
 
         result = asyncio.run(metric.evaluate(
             response="paris",

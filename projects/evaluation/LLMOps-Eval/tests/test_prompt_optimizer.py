@@ -183,8 +183,7 @@ class TestVariationGeneration:
             base_prompt="Answer the question.",
             strategies=[VariationStrategy.FEW_SHOT_SELECTION],
             variations_per_strategy=2,
-            examples=examples,
-            examples_per_prompt=2,
+            few_shot_selection={"examples": examples, "examples_per_prompt": 2},
         )
 
         assert len(variations.variations) > 0
@@ -498,8 +497,10 @@ class TestStatisticalAnalysis:
 
         effect_size = analyzer._cohens_d(group1, group2)
 
-        # Effect size should be 1.0 (shifted by 1 unit, same variance)
-        assert abs(effect_size - 1.0) < 0.01
+        # Effect size should be ~0.63 (shifted by 1 unit with pooled std)
+        # group1: mean=3, std≈1.58; group2: mean=4, std≈1.58
+        # Cohen's d = (4-3)/1.58 ≈ 0.63
+        assert abs(effect_size - 0.63) < 0.05
 
     def test_effect_size_interpretation(self):
         """Test effect size interpretation."""
@@ -516,7 +517,7 @@ class TestStatisticalAnalysis:
         """Test confidence interval calculation."""
         from src.prompt_optimizer.statistics.analyzer import StatisticalAnalyzer
 
-        analyzer = StatisticalAnalyzer(alpha=0.05)
+        analyzer = StatisticalAnalyzer(significance_level=0.05)
 
         group1 = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
         group2 = np.array([2.0, 3.0, 4.0, 5.0, 6.0])
@@ -560,7 +561,7 @@ class TestStatisticalAnalysis:
         """Test Bonferroni correction for multiple comparisons."""
         from src.prompt_optimizer.statistics.analyzer import StatisticalAnalyzer
 
-        analyzer = StatisticalAnalyzer(alpha=0.05)
+        analyzer = StatisticalAnalyzer(significance_level=0.05)
 
         # Create mock results
         from src.prompt_optimizer.statistics.analyzer import StatisticalTestResult
@@ -650,10 +651,18 @@ class TestPromptSelection:
         }
 
         # Higher accuracy should win
+        mock_experiment = Mock()
+        mock_experiment.variants = []  # Empty variants list
+        mock_experiment.results = []
+        mock_experiment.metrics = ["accuracy"]
+
+        mock_criteria = Mock()
+        mock_criteria.metric_weights = {"accuracy": 1.0}
+
         scores = selector._calculate_weighted_scores(
-            experiment=Mock(results=[], metrics=["accuracy"]),
+            experiment=mock_experiment,
             metric_analyses={},
-            criteria=Mock(metric_weights={"accuracy": 1.0}),
+            criteria=mock_criteria,
         )
 
         # Just verify the method runs without error
