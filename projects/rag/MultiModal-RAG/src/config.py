@@ -80,7 +80,7 @@ class Settings(BaseSettings):
     # ============================================================
     OPENAI_API_KEY: str = Field(
         default="",
-        description="OpenAI API key for LLM and RAGAS evaluation",
+        description="OpenAI API key for LLM and RAGAS evaluation (optional)",
     )
     ANTHROPIC_API_KEY: Optional[str] = Field(
         default=None,
@@ -89,6 +89,15 @@ class Settings(BaseSettings):
     COHERE_API_KEY: Optional[str] = Field(
         default=None,
         description="Cohere API key for Cohere reranker (optional)",
+    )
+    # GLM (ZhipuAI) - Primary LLM provider
+    GLM_API_KEY: str = Field(
+        default="",
+        description="GLM (ZhipuAI) API key - primary LLM provider",
+    )
+    GLM_BASE_URL: str = Field(
+        default="https://api.z.ai/api/anthropic",
+        description="GLM API base URL (Anthropic-compatible)",
     )
 
     # ============================================================
@@ -103,7 +112,7 @@ class Settings(BaseSettings):
         description="Model name for cross-encoder reranking",
     )
     LLM_MODEL: str = Field(
-        default="gpt-4-turbo",
+        default="glm-4-plus",
         description="LLM model for response generation",
     )
     LLM_TEMPERATURE: float = Field(

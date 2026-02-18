@@ -139,7 +139,9 @@ async def lifespan(app: FastAPI):
         elif llm_model_lower.startswith("glm"):
             llm_provider = "glm"
         else:
-            llm_provider = "openai"  # default
+            llm_provider = "glm"  # default to GLM
+
+        logger.info(f"Using LLM provider: {llm_provider} with model: {settings.LLM_MODEL}")
 
         rag_chain = create_rag_chain(
             retriever=hybrid_retriever,

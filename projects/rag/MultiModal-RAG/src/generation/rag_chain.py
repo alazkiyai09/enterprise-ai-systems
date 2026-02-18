@@ -329,17 +329,22 @@ class RAGChain:
             raise ImportError("openai package is required for Ollama provider")
 
     def _load_glm_client(self) -> None:
-        """Load GLM (ZhipuAI) client."""
+        """Load GLM (ZhipuAI) client using Anthropic-compatible API."""
         try:
-            from zhipuai import ZhipuAI
+            from anthropic import Anthropic
 
-            api_key = settings.OPENAI_API_KEY  # Reuse or add GLM_API_KEY
+            api_key = settings.GLM_API_KEY
             if not api_key:
-                raise ValueError("API key is required for GLM provider")
+                raise ValueError("GLM_API_KEY is required for GLM provider")
 
-            self._llm_client = ZhipuAI(api_key=api_key)
+            # Use Anthropic SDK with GLM's Anthropic-compatible endpoint
+            self._llm_client = Anthropic(
+                api_key=api_key,
+                base_url=settings.GLM_BASE_URL,
+            )
+            logger.info(f"GLM client loaded with base URL: {settings.GLM_BASE_URL}")
         except ImportError:
-            raise ImportError("zhipuai package is required for GLM provider")
+            raise ImportError("anthropic package is required for GLM provider")
 
     # ============================================================
     # Query Methods
@@ -742,20 +747,36 @@ Answer:"""
         self,
         messages: list[dict[str, str]],
     ) -> Tuple[str, Optional[dict[str, int]]]:
-        """Generate using GLM (ZhipuAI)."""
+        """Generate using GLM (Anthropic-compatible API)."""
         try:
-            response = self.llm_client.chat.completions.create(
-                model=self.model_name,  # e.g., "glm-4"
-                messages=messages,
-                temperature=self.temperature,
+            # Convert messages to Anthropic format
+            # Anthropic expects system message separately
+            system_message = None
+            anthropic_messages = []
+
+            for msg in messages:
+                if msg["role"] == "system":
+                    system_message = msg["content"]
+                else:
+                    anthropic_messages.append({
+                        "role": msg["role"],
+                        "content": msg["content"],
+                    })
+
+            # Create message with Anthropic API
+            response = self.llm_client.messages.create(
+                model=self.model_name,  # e.g., "glm-5-flash"
                 max_tokens=self.max_tokens,
+                temperature=self.temperature,
+                system=system_message,
+                messages=anthropic_messages,
             )
 
-            answer = response.choices[0].message.content
+            answer = response.content[0].text
             token_usage = {
-                "prompt_tokens": response.usage.prompt_tokens,
-                "completion_tokens": response.usage.completion_tokens,
-                "total_tokens": response.usage.total_tokens,
+                "prompt_tokens": response.usage.input_tokens,
+                "completion_tokens": response.usage.output_tokens,
+                "total_tokens": response.usage.input_tokens + response.usage.output_tokens,
             }
 
             return answer, token_usage

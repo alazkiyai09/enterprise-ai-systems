@@ -1,0 +1,92 @@
+services:
+  chromadb:
+    image: chromadb/chroma:0.5.23
+    container_name: multimodal-rag-chromadb
+    restart: unless-stopped
+    ports:
+      - "8002:8000"
+    volumes:
+      - chromadb_data:/chroma/chroma
+    environment:
+      - CHROMA_SERVER_HOST=0.0.0.0
+      - CHROMA_SERVER_HTTP_PORT=8000
+      - CHROMA_SERVER_GRPC_PORT=50051
+      - ANONYMIZED_TELEMETRY=False
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - multimodal-rag-network
+
+  multimodal-rag-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: multimodal-rag-api
+    restart: unless-stopped
+    privileged: true
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount application code for development (comment out for production)
+      - ./src:/app/src
+      - ./data:/app/data
+      - ./logs:/app/logs
+      # Mount shared module
+      - ../../../shared:/app/shared
+      # Persist HuggingFace cache
+      - hf_cache:/app/.cache/huggingface
+    environment:
+      # ChromaDB configuration
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+      # Disable ChromaDB's default ONNX embedding function
+      - ANONYMIZED_TELEMETRY=False
+      # HuggingFace configuration
+      - HF_HOME=/app/.cache/huggingface
+      - TRANSFORMERS_CACHE=/app/.cache/huggingface
+      - HF_DATASETS_CACHE=/app/.cache/huggingface
+      # GLM API (Primary LLM provider)
+      - GLM_API_KEY=6a2eff5c179246fabc7371dabd5a6109.mJfIITCBdRyV7L1f
+      - GLM_BASE_URL=https://api.z.ai/api/anthropic
+      # Optional: Other API Keys
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      # Application settings
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - MAX_UPLOAD_SIZE=${MAX_UPLOAD_SIZE:-10485760}
+      - ENABLE_CORS=${ENABLE_CORS:-true}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    depends_on:
+      chromadb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - multimodal-rag-network
+
+networks:
+  multimodal-rag-network:
+    driver: bridge
+    name: multimodal-rag-network
+
+volumes:
+  chromadb_data:
+    name: multimodal-rag-chromadb-data
+    driver: local
+  hf_cache:
+    name: multimodal-rag-hf-cache
+    driver: local
