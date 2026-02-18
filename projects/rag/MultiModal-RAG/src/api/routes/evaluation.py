@@ -98,10 +98,7 @@ async def run_evaluation(request: EvaluationRequest):
             "num_samples": 10
         }
     """
-    from fastapi import Request
-
-    request_obj = Request.scope()["app"]
-    rag_evaluator = getattr(request_obj.state, "rag_evaluator", None)
+    from src.api.main import rag_evaluator
 
     if rag_evaluator is None:
         raise HTTPException(
@@ -161,11 +158,7 @@ async def evaluate_single(request: SingleEvaluationRequest):
             "ground_truth": "Refunds take 5-7 business days."
         }
     """
-    from fastapi import Request
-
-    request_obj = Request.scope()["app"]
-    rag_chain = getattr(request_obj.state, "rag_chain", None)
-    rag_evaluator = getattr(request_obj.state, "rag_evaluator", None)
+    from src.api.main import rag_chain, rag_evaluator
 
     if rag_chain is None or rag_evaluator is None:
         raise HTTPException(
@@ -210,10 +203,7 @@ async def generate_report():
         GET /api/v1/evaluation/report
     """
     from fastapi import Response
-    from fastapi import Request
-
-    request_obj = Request.scope()["app"]
-    rag_evaluator = getattr(request_obj.state, "rag_evaluator", None)
+    from src.api.main import rag_evaluator
 
     if rag_evaluator is None:
         raise HTTPException(

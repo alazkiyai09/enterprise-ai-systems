@@ -274,7 +274,7 @@ class CrossEncoderReranker:
                 extra={
                     "model": self.model_name,
                     "load_time": round(load_time, 2),
-                    "device": str(self._model.device),
+                    "device": str(self.device),
                 },
             )
 

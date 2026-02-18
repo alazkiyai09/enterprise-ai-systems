@@ -169,12 +169,8 @@ async def query_stream(request: StreamQueryRequest):
             "question": "Explain the privacy policy"
         }
     """
-    from fastapi import Request
     from fastapi.responses import StreamingResponse
-
-    # Get RAG chain
-    request_obj = Request.scope()["app"]
-    rag_chain = getattr(request_obj.state, "rag_chain", None)
+    from src.api.main import rag_chain
 
     if rag_chain is None:
         raise HTTPException(
@@ -208,10 +204,7 @@ async def clear_conversation():
     Example:
         POST /api/v1/conversation/clear
     """
-    from fastapi import Request
-
-    request_obj = Request.scope()["app"]
-    rag_chain = getattr(request_obj.state, "rag_chain", None)
+    from src.api.main import rag_chain
 
     if rag_chain is None:
         raise HTTPException(
@@ -236,10 +229,7 @@ async def get_conversation():
     Example:
         GET /api/v1/conversation
     """
-    from fastapi import Request
-
-    request_obj = Request.scope()["app"]
-    rag_chain = getattr(request_obj.state, "rag_chain", None)
+    from src.api.main import rag_chain
 
     if rag_chain is None:
         raise HTTPException(

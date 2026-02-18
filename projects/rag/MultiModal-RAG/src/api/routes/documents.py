@@ -95,11 +95,8 @@ async def ingest_document(
         Content-Type: multipart/form-data
         file: document.pdf
     """
-    from fastapi import Request
-
-    request_obj = Request.scope()["app"]
-    document_processor = getattr(request_obj.state, "document_processor", None)
-    rag_chain = getattr(request_obj.state, "rag_chain", None)
+    # Import global components from main module
+    from src.api.main import document_processor, rag_chain
 
     if document_processor is None or rag_chain is None:
         raise HTTPException(
@@ -118,7 +115,7 @@ async def ingest_document(
         )
 
     # Validate file type
-    file_ext = Path(file.filename).suffix.lower()
+    file_ext = Path(file.filename).suffix.lower().lstrip('.')
     supported_formats = settings.supported_formats_list
 
     if file_ext not in supported_formats:
@@ -188,11 +185,8 @@ async def list_documents():
     Example:
         GET /api/v1/documents
     """
-    from fastapi import Request
     from collections import defaultdict
-
-    request_obj = Request.scope()["app"]
-    vector_store = getattr(request_obj.state, "vector_store", None)
+    from src.api.main import vector_store
 
     if vector_store is None:
         raise HTTPException(
@@ -233,11 +227,7 @@ async def delete_document(doc_id: str):
     Example:
         DELETE /api/v1/documents/doc_abc123
     """
-    from fastapi import Request
-
-    request_obj = Request.scope()["app"]
-    vector_store = getattr(request_obj.state, "vector_store", None)
-    rag_chain = getattr(request_obj.state, "rag_chain", None)
+    from src.api.main import vector_store, rag_chain
 
     if vector_store is None or rag_chain is None:
         raise HTTPException(
@@ -285,11 +275,7 @@ async def batch_ingest(files: list[UploadFile] = File(...)):
         POST /api/v1/documents/batch-ingest
         Files: [doc1.pdf, doc2.docx, doc3.txt]
     """
-    from fastapi import Request
-
-    request_obj = Request.scope()["app"]
-    document_processor = getattr(request_obj.state, "document_processor", None)
-    rag_chain = getattr(request_obj.state, "rag_chain", None)
+    from src.api.main import document_processor, rag_chain
 
     if document_processor is None or rag_chain is None:
         raise HTTPException(
