@@ -157,6 +157,11 @@ async def lifespan(app: FastAPI):
             logger.info("RAG evaluation disabled")
             rag_evaluator = None
 
+        # Initialize multimodal components (lazy - on first use)
+        # Note: This downloads large models (CLIP/BLIP ~338MB) on first initialization
+        # For faster startup, these are initialized lazily in the multimodal endpoints
+        logger.info("Multimodal components will be initialized on first use")
+
         # Store components in app state for access in routes
         app.state.rag_chain = rag_chain
         app.state.document_processor = document_processor

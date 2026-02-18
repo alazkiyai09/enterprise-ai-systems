@@ -289,6 +289,102 @@ Database containers often need more time to initialize. Use appropriate `start_p
 
 ---
 
+## GLM-5 Integration Issues
+
+### Issue 13: GLM API Model Name Mismatch
+
+**Date:** 2026-02-19
+
+**Problem:**
+`Error code: 400 - {'error': {'code': '1211', 'message': 'Unknown Model, please check the model code.'}}`
+
+**Root Cause:**
+Used incorrect model name `glm-5-flash` which doesn't exist in GLM API. Different APIs use different model naming conventions.
+
+**Solution:**
+Use the correct model name `glm-5` as specified in the GLM documentation.
+
+**Lesson:**
+Always verify model names against the API documentation. Model names vary between providers and even between different endpoints of the same provider.
+
+---
+
+### Issue 14: GLM API Rate Limiting (Insufficient Balance)
+
+**Date:** 2026-02-19
+
+**Problem:**
+`Error code: 429 - {'error': {'code': '1113', 'message': 'Insufficient balance or no resource package. Please recharge.'}}`
+
+**Root Cause:**
+The GLM API key had insufficient balance to make requests.
+
+**Solution:**
+Recharge the API key balance. This is expected behavior for paid APIs.
+
+**Lesson:**
+Always ensure API keys have sufficient balance/credits before testing. Monitor API usage and set up alerts for low balance.
+
+---
+
+### Issue 15: GLM API Integration Approaches
+
+**Date:** 2026-02-19
+
+**Problem:**
+Multiple integration approaches exist for GLM API, causing confusion about which to use.
+
+**Root Cause:**
+GLM API supports multiple access methods:
+1. LangChain `ChatZhipuAI` - requires `pyjwt` dependency
+2. Anthropic-compatible API via `anthropic` SDK
+3. Native ZhipuAI SDK
+
+**Solution:**
+Use the Anthropic-compatible API with `anthropic` SDK for simplicity:
+```python
+import anthropic
+
+client = anthropic.Anthropic(
+    api_key="your-api-key",
+    base_url="https://api.z.ai/api/anthropic",  # International
+)
+
+response = client.messages.create(
+    model="glm-5",
+    max_tokens=1024,
+    messages=[{"role": "user", "content": "Hello"}],
+)
+```
+
+**Lesson:**
+When a provider offers multiple SDK options, choose the one that:
+1. Uses familiar patterns (Anthropic SDK is widely known)
+2. Has fewer dependencies
+3. Has better documentation
+
+---
+
+### Issue 16: Missing pyjwt Dependency for ChatZhipuAI
+
+**Date:** 2026-02-19
+
+**Problem:**
+`ImportError: jwt package not found, please install it with pip install pyjwt`
+
+**Root Cause:**
+The `langchain_community.chat_models.ChatZhipuAI` requires `pyjwt` for JWT-based authentication with ZhipuAI's native API, but it wasn't listed in requirements.txt.
+
+**Solution:**
+Either:
+1. Add `pyjwt` to requirements.txt if using ChatZhipuAI
+2. Use Anthropic-compatible API instead (no pyjwt needed)
+
+**Lesson:**
+Third-party library wrappers often have hidden dependencies. Check the library's documentation for all required packages, or use the native SDK when available.
+
+---
+
 ## Best Practices Identified
 
 ### 1. Module Exports
