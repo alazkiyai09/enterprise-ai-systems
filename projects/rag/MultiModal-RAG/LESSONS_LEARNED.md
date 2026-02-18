@@ -147,6 +147,128 @@ When using `chromadb-client` (HTTP-only), always connect to a remote ChromaDB se
 
 ---
 
+### Issue 8: Request.scope() Bug in Multiple Route Files
+
+**Date:** 2026-02-19
+
+**Problem:**
+Multiple API routes failed with `AttributeError: type object 'Request' has no attribute 'scope'` during document ingestion, queries, and evaluation.
+
+**Root Cause:**
+The same `Request.scope()["app"]` pattern was used in multiple route files (documents.py, query.py, evaluation.py), affecting nearly all endpoints.
+
+**Solution:**
+Replaced all occurrences with direct imports from the main module:
+```python
+from src.api.main import rag_chain, document_processor, vector_store, rag_evaluator
+```
+
+**Files Fixed:**
+- `src/api/routes/documents.py` - 3 occurrences
+- `src/api/routes/query.py` - 3 occurrences
+- `src/api/routes/evaluation.py` - 3 occurrences
+
+**Lesson:**
+When a pattern is repeated across multiple files, fix all occurrences systematically. Use grep to find all instances: `grep -r "Request.scope()" src/`
+
+---
+
+### Issue 9: Reserved LogRecord Attribute in Logging
+
+**Date:** 2026-02-19
+
+**Problem:**
+`KeyError: "Attempt to overwrite 'filename' in LogRecord"`
+
+**Root Cause:**
+Python's logging module reserves certain attribute names (like `filename`, `lineno`, `levelname`) in LogRecord. Using these as keys in the `extra` parameter causes a conflict.
+
+**Solution:**
+Renamed the reserved attribute to avoid conflict:
+```python
+# Before
+logger.info(..., extra={"filename": filename, ...})
+
+# After
+logger.info(..., extra={"doc_filename": filename, ...})
+```
+
+**Lesson:**
+Avoid using reserved LogRecord attribute names in logging `extra` dicts. Common reserved names include: `filename`, `lineno`, `levelname`, `message`, `name`, `pathname`, `process`, `thread`.
+
+---
+
+### Issue 10: Lazy-Loaded Model Not Accessed via Property
+
+**Date:** 2026-02-19
+
+**Problem:**
+`AttributeError: 'NoneType' object has no attribute 'encode'` during embedding generation.
+
+**Root Cause:**
+The `EmbeddingService` class uses lazy loading with a `model` property, but the `embed_texts` method directly accessed `self._model` instead of `self.model`, bypassing the lazy-loading mechanism.
+
+**Solution:**
+Changed direct attribute access to use the property:
+```python
+# Before
+new_embeddings = self._model.encode(...)
+
+# After
+new_embeddings = self.model.encode(...)  # Triggers lazy loading
+```
+
+**Lesson:**
+When implementing lazy loading with properties, always use the property accessor, not the underlying private attribute. The property ensures the resource is loaded before use.
+
+---
+
+### Issue 11: CrossEncoder Missing device Attribute
+
+**Date:** 2026-02-19
+
+**Problem:**
+`AttributeError: 'CrossEncoder' object has no attribute 'device'`
+
+**Root Cause:**
+The reranker code tried to log the model's device with `self._model.device`, but the `CrossEncoder` class from sentence-transformers doesn't expose a `device` attribute directly.
+
+**Solution:**
+Use the configured device value instead of trying to read it from the model:
+```python
+# Before
+"device": str(self._model.device),
+
+# After
+"device": str(self.device),  # Use configured device
+```
+
+**Lesson:**
+Don't assume third-party library classes expose internal attributes. Check the library's API documentation or use values you control.
+
+---
+
+### Issue 12: File Extension Mismatch in Validation
+
+**Date:** 2026-02-19
+
+**Problem:**
+Document upload failed with "Unsupported file type: .txt" even though "txt" was in the supported formats list.
+
+**Root Cause:**
+`Path.suffix` returns the extension with a dot (`.txt`), but the supported formats list contained extensions without dots (`['pdf', 'docx', 'txt']`).
+
+**Solution:**
+Strip the leading dot from the file extension before comparison:
+```python
+file_ext = Path(file.filename).suffix.lower().lstrip('.')
+```
+
+**Lesson:**
+Be aware of the exact format returned by path manipulation functions. `Path.suffix` includes the dot; `Path.stem` does not include the extension.
+
+---
+
 ## ChromaDB Container Issues
 
 ### Issue 7: ChromaDB Health Check Timing
