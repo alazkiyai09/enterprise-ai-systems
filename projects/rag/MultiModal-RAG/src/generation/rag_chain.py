@@ -329,23 +329,22 @@ class RAGChain:
             raise ImportError("openai package is required for Ollama provider")
 
     def _load_glm_client(self) -> None:
-        """Load GLM (ZhipuAI) client using LangChain ChatZhipuAI."""
+        """Load GLM (ZhipuAI) client using Anthropic-compatible API."""
         try:
-            from langchain_community.chat_models import ChatZhipuAI
+            import anthropic
 
             api_key = settings.GLM_API_KEY
             if not api_key:
                 raise ValueError("GLM_API_KEY is required for GLM provider")
 
-            # Use LangChain ChatZhipuAI wrapper
-            self._llm_client = ChatZhipuAI(
-                model=settings.LLM_MODEL,  # e.g., "glm-5"
-                temperature=self.temperature,
+            # Use Anthropic SDK with GLM's Anthropic-compatible endpoint
+            self._llm_client = anthropic.Anthropic(
                 api_key=api_key,
+                base_url=settings.GLM_BASE_URL,
             )
-            logger.info(f"GLM client loaded with model: {settings.LLM_MODEL}")
+            logger.info(f"GLM client loaded with base URL: {settings.GLM_BASE_URL}")
         except ImportError:
-            raise ImportError("langchain-community package is required for GLM provider")
+            raise ImportError("anthropic package is required for GLM provider")
 
     # ============================================================
     # Query Methods
@@ -748,32 +747,42 @@ Answer:"""
         self,
         messages: list[dict[str, str]],
     ) -> Tuple[str, Optional[dict[str, int]]]:
-        """Generate using GLM (LangChain ChatZhipuAI)."""
+        """Generate using GLM (Anthropic-compatible API)."""
         try:
-            from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+            # Convert messages to Anthropic format
+            # Anthropic expects system message separately
+            system_message = None
+            anthropic_messages = []
 
-            # Convert messages to LangChain format
-            lc_messages = []
             for msg in messages:
                 if msg["role"] == "system":
-                    lc_messages.append(SystemMessage(content=msg["content"]))
-                elif msg["role"] == "user":
-                    lc_messages.append(HumanMessage(content=msg["content"]))
-                elif msg["role"] == "assistant":
-                    lc_messages.append(AIMessage(content=msg["content"]))
+                    system_message = msg["content"]
+                else:
+                    anthropic_messages.append({
+                        "role": msg["role"],
+                        "content": msg["content"],
+                    })
 
-            # Invoke the LangChain model
-            response = self.llm_client.invoke(lc_messages)
+            # Build request kwargs
+            request_kwargs = {
+                "model": self.model_name,  # glm-5
+                "max_tokens": self.max_tokens,
+                "messages": anthropic_messages,
+            }
 
-            answer = response.content
-            token_usage = None
-            if hasattr(response, 'response_metadata') and 'token_usage' in response.response_metadata:
-                usage = response.response_metadata['token_usage']
-                token_usage = {
-                    "prompt_tokens": usage.get('prompt_tokens', 0),
-                    "completion_tokens": usage.get('completion_tokens', 0),
-                    "total_tokens": usage.get('total_tokens', 0),
-                }
+            # Add system message if present
+            if system_message:
+                request_kwargs["system"] = system_message
+
+            # Create message with Anthropic API
+            response = self.llm_client.messages.create(**request_kwargs)
+
+            answer = response.content[0].text
+            token_usage = {
+                "prompt_tokens": response.usage.input_tokens,
+                "completion_tokens": response.usage.output_tokens,
+                "total_tokens": response.usage.input_tokens + response.usage.output_tokens,
+            }
 
             return answer, token_usage
 

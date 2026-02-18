@@ -97,7 +97,8 @@ class Settings(BaseSettings):
     )
     GLM_BASE_URL: str = Field(
         default="https://api.z.ai/api/anthropic",
-        description="GLM API base URL (Anthropic-compatible)",
+        description="GLM API base URL (Anthropic-compatible, international)",
+        # Alternative: https://open.bigmodel.cn/api/anthropic (China mainland)
     )
 
     # ============================================================
