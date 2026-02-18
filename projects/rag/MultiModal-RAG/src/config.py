@@ -24,6 +24,33 @@ from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+# ============================================================
+# Docker-Aware Cache Configuration
+# ============================================================
+# Set HuggingFace cache directories before importing any ML libraries
+# These can be overridden via environment variables
+
+# Detect if running in Docker or locally
+def _is_docker():
+    """Check if running in Docker container."""
+    return os.path.exists("/.dockerenv") or os.path.exists("/app/.dockerenv")
+
+# Default cache directories (Docker-friendly paths)
+if _is_docker():
+    DEFAULT_HF_HOME = os.environ.get("HF_HOME", "/app/.cache/huggingface")
+else:
+    # Use local path when not in Docker
+    DEFAULT_HF_HOME = os.environ.get("HF_HOME", str(Path(__file__).parent.parent / ".cache" / "huggingface"))
+
+DEFAULT_TRANSFORMERS_CACHE = os.environ.get("TRANSFORMERS_CACHE", "")
+
+# Set environment variables for HuggingFace caching
+if "HF_HOME" not in os.environ:
+    os.environ["HF_HOME"] = DEFAULT_HF_HOME
+if "TRANSFORMERS_CACHE" not in os.environ and DEFAULT_TRANSFORMERS_CACHE:
+    os.environ["TRANSFORMERS_CACHE"] = DEFAULT_TRANSFORMERS_CACHE
+
+
 class Settings(BaseSettings):
     """
     Application settings with environment variable support.
@@ -147,9 +174,20 @@ class Settings(BaseSettings):
         default="chroma",
         description="Type of vector database to use",
     )
+    # ChromaDB remote server settings (for Docker deployment)
+    CHROMA_HOST: Optional[str] = Field(
+        default=None,
+        description="ChromaDB server host (None for local persistent mode)",
+    )
+    CHROMA_PORT: int = Field(
+        default=8000,
+        ge=1,
+        le=65535,
+        description="ChromaDB server port",
+    )
     CHROMA_PATH: str = Field(
         default="./data/chroma",
-        description="Path to ChromaDB persistence directory",
+        description="Path to ChromaDB persistence directory (for local mode)",
     )
     QDRANT_HOST: str = Field(
         default="localhost",
@@ -416,6 +454,17 @@ class Settings(BaseSettings):
         """Get the full path to log file."""
         return self.project_root / self.LOG_FILE.lstrip("./")
 
+    @property
+    def hf_cache_path(self) -> Path:
+        """Get the HuggingFace cache directory."""
+        return Path(os.environ.get("HF_HOME", DEFAULT_HF_HOME))
+
+    @property
+    def transformers_cache_path(self) -> Path:
+        """Get the transformers cache directory."""
+        cache_dir = os.environ.get("TRANSFORMERS_CACHE", "")
+        return Path(cache_dir) if cache_dir else self.hf_cache_path / "transformers"
+
     # ============================================================
     # Methods
     # ============================================================
@@ -425,6 +474,8 @@ class Settings(BaseSettings):
             self.chroma_persist_path,
             self.documents_storage_path,
             self.log_file_path.parent,
+            self.hf_cache_path,
+            self.transformers_cache_path,
         ]
         for directory in directories:
             directory.mkdir(parents=True, exist_ok=True)

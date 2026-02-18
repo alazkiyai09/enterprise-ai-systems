@@ -95,11 +95,8 @@ async def query(request: QueryRequest):
             "use_reranking": true
         }
     """
-    from fastapi import Request
-
-    # Get RAG chain from app state
-    request_obj = Request.scope()["app"]
-    rag_chain = getattr(request_obj.state, "rag_chain", None)
+    # Import global rag_chain from main module
+    from src.api.main import rag_chain
 
     if rag_chain is None:
         raise HTTPException(

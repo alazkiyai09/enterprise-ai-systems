@@ -17,6 +17,7 @@ from src.generation.rag_chain import (
     LLMProvider,
     RAGChain,
     RAGResponse,
+    create_rag_chain,
 )
 
 __all__ = [
@@ -24,4 +25,5 @@ __all__ = [
     "RAGResponse",
     "Citation",
     "LLMProvider",
+    "create_rag_chain",
 ]

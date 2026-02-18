@@ -15,10 +15,14 @@ from src.evaluation.rag_evaluator import (
     EvaluationResult,
     EvaluationSample,
     RAGEvaluator,
+    DEFAULT_TEST_SAMPLES,
+    create_evaluator,
 )
 
 __all__ = [
     "RAGEvaluator",
     "EvaluationSample",
     "EvaluationResult",
+    "DEFAULT_TEST_SAMPLES",
+    "create_evaluator",
 ]

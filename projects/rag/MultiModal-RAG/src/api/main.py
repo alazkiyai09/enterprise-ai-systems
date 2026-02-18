@@ -96,7 +96,7 @@ async def lifespan(app: FastAPI):
         # Import here to avoid circular imports
         from src.generation import RAGChain, create_rag_chain, LLMProvider
         from src.ingestion import DocumentProcessor, create_processor_from_settings
-        from src.retrieval import create_vector_store, create_embedding_service, create_hybrid_retriever, CrossEncoderReranker
+        from src.retrieval import create_vector_store, create_vector_store_from_settings, create_embedding_service, create_hybrid_retriever, CrossEncoderReranker
         from src.evaluation import RAGEvaluator, create_evaluator
 
         # Initialize embedding service
@@ -130,10 +130,21 @@ async def lifespan(app: FastAPI):
 
         # Initialize RAG chain
         logger.info("Initializing RAG chain...")
+        # Determine LLM provider from model name
+        llm_model_lower = settings.LLM_MODEL.lower()
+        if llm_model_lower.startswith("gpt") or llm_model_lower.startswith("o1") or llm_model_lower.startswith("o3"):
+            llm_provider = "openai"
+        elif llm_model_lower.startswith("claude"):
+            llm_provider = "anthropic"
+        elif llm_model_lower.startswith("glm"):
+            llm_provider = "glm"
+        else:
+            llm_provider = "openai"  # default
+
         rag_chain = create_rag_chain(
             retriever=hybrid_retriever,
             reranker=reranker,
-            llm_provider=settings.LLM_MODEL.split("-")[0] if "-" in settings.LLM_MODEL else "openai",
+            llm_provider=llm_provider,
         )
 
         # Initialize evaluator
@@ -222,7 +233,8 @@ app.add_middleware(
 )
 
 # Install security filter for logs
-install_security_filter()
+logger = logging.getLogger(__name__)
+install_security_filter(logger)
 
 # Register error handlers
 register_error_handlers(app)
@@ -309,9 +321,9 @@ async def register(
 @app.post("/auth/login", tags=["Authentication"])
 @limiter.limit("20/minute")
 async def login(
+    request: Request,
     username: str = Form(...),
     password: str = Form(...),
-    request: Request = None,
 ):
     """Login and receive access token."""
     from shared.auth import authenticate_user, login_user
@@ -331,8 +343,8 @@ async def login(
 @app.post("/auth/refresh", tags=["Authentication"])
 @limiter.limit("30/minute")
 async def refresh(
+    request: Request,
     refresh_token: str = Body(..., embed=True),
-    request: Request = None,
 ):
     """Refresh access token."""
     from shared.auth import refresh_user_token
@@ -349,7 +361,7 @@ async def refresh(
 
 @app.get("/auth/me", tags=["Authentication"])
 @limiter.limit("60/minute")
-async def get_current_user_info(current_user: TokenData = Depends(get_current_user)):
+async def get_current_user_info(request: Request, current_user: TokenData = Depends(get_current_user)):
     """Get current user information."""
     user = await user_store.get_user_by_id(current_user.user_id)
     if not user:

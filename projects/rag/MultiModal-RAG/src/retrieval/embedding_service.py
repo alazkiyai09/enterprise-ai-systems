@@ -173,7 +173,7 @@ class EmbeddingService:
         """
         # Configuration
         self.model_name = model_name or settings.EMBEDDING_MODEL
-        self.device = device
+        self._device_config = device  # Store config, actual device detected later
         self.batch_size = batch_size or settings.EMBEDDING_BATCH_SIZE
         self.normalize = normalize
         self.cache_size = cache_size
@@ -307,8 +307,8 @@ class EmbeddingService:
             >>> device = service._detect_device()
             >>> print(device)  # "cuda" or "cpu"
         """
-        if self.device != "auto":
-            return self.device
+        if self._device_config != "auto":
+            return self._device_config
 
         # Try CUDA first
         try:

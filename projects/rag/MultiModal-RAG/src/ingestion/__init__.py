@@ -12,10 +12,12 @@ from src.ingestion.document_processor import (
     Document,
     DocumentProcessor,
     ProcessingResult,
+    create_processor_from_settings,
 )
 
 __all__ = [
     "Document",
     "DocumentProcessor",
     "ProcessingResult",
+    "create_processor_from_settings",
 ]
