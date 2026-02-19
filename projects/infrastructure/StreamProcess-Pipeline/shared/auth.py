@@ -670,17 +670,20 @@ async def refresh_user_token(
         if not user or not user.is_active:
             return None
 
+        # Handle both Role enum and string values
+        role_value = user.role.value if hasattr(user.role, 'value') else user.role
+
         # Create new tokens
         access_token = create_access_token({
             "sub": user.id,
             "username": user.username,
-            "role": user.role.value,
+            "role": role_value,
         })
 
         new_refresh_token = create_refresh_token({
             "sub": user.id,
             "username": user.username,
-            "role": user.role.value,
+            "role": role_value,
         })
 
         logger.info(f"Token refreshed for user: {user.username}")
