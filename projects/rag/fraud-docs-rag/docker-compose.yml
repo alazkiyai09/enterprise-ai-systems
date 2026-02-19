@@ -51,7 +51,7 @@ services:
     # Environment variables
     environment:
       - CHROMA_SERVER_HOST=0.0.0.0
-      - CHROMA_SERVER_HTTP_PORT=8001
+      - CHROMA_SERVER_HTTP_PORT=8000
       - CHROMA_SERVER_GRPC_PORT=8002
       - CHROMA_LOG_LEVEL=INFO
       # Disable anonymous telemetry
@@ -59,8 +59,8 @@ services:
 
     # Ports
     ports:
-      - "${CHROMA_PORT:-8001}:8001"
-      - "8002:8002"  # gRPC port
+      - "${CHROMA_PORT:-8003}:8000"
+      - "8004:8002"  # gRPC port
 
     # Volumes for persistent storage
     volumes:
@@ -71,9 +71,9 @@ services:
     networks:
       - frauddocs-network
 
-    # Health check
+    # Health check (using bash /dev/tcp instead of curl)
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/api/v1/heartbeat"]
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/8000' || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -131,7 +131,7 @@ services:
 
       # ChromaDB connection
       - CHROMA_HOST=chromadb
-      - CHROMA_PORT=8001
+      - CHROMA_PORT=8000
       - CHROMA_PERSIST_DIRECTORY=/app/data/chroma_db
       - CHROMA_COLLECTION_NAME=financial_documents
 
@@ -173,6 +173,16 @@ services:
       # CORS settings
       - ENABLE_CORS=true
 
+      # GLM API Configuration
+      - ZHIPUAI_API_KEY=${ZHIPUAI_API_KEY:-}
+      - GLM_MODEL=${GLM_MODEL:-glm-4.5}
+      - GLM_BASE_URL=${GLM_BASE_URL:-https://open.bigmodel.cn/api/paas/v4}
+
+    # DNS configuration for external connectivity
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+
     # Ports
     ports:
       - "${API_PORT:-8000}:8000"
@@ -181,10 +191,10 @@ services:
     volumes:
       # Document storage
       - document-store:/app/data
-      # Model cache
-      - model-cache:/home/appuser/.cache
       # Logs (optional - for persistent logs)
       - ./logs:/app/logs
+      # Shared modules
+      - /mnt/data/Project/AIEngineerProject/shared:/app/src/shared:ro
 
     # Networks
     networks:
@@ -195,9 +205,9 @@ services:
       chromadb:
         condition: service_healthy
 
-    # Health check
+    # Health check (using Python urllib instead of curl)
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\" || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -243,11 +253,11 @@ services:
 
     # Networks
     networks:
-      - fr auddocs-network
+      - frauddocs-network
 
-    # Health check
+    # Health check (using bash /dev/tcp instead of curl)
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/11434' || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -92,7 +92,7 @@ class Source(BaseModel):
     index: int = Field(..., description="Citation index number", ge=1)
     source: str = Field(..., description="Source file name")
     doc_type: str = Field(..., description="Document category")
-    score: float = Field(..., description="Relevance score", ge=0.0, le=1.0)
+    score: float = Field(..., description="Relevance score")
     preview: str = Field(..., description="Content preview (first 200 chars)")
     title: str = Field(default="", description="Document title")
 
@@ -454,7 +454,8 @@ app.add_middleware(
 )
 
 # Install security filter for logs
-install_security_filter()
+import logging
+install_security_filter(logging.getLogger())
 
 # Register error handlers
 register_error_handlers(app)
@@ -560,8 +561,8 @@ user_store = InMemoryUserStore()
 @app.post("/auth/register", tags=["Authentication"])
 @limiter.limit("10/hour")
 async def register(
-    user_data: UserCreate,
     request: Request,
+    user_data: UserCreate,
 ):
     """Register a new user."""
     try:
@@ -585,9 +586,9 @@ async def register(
 @app.post("/auth/login", tags=["Authentication"])
 @limiter.limit("20/minute")
 async def login(
+    request: Request,
     username: str = Form(...),
     password: str = Form(...),
-    request: Request = None,
 ):
     """Login and receive access token."""
     from shared.auth import authenticate_user, login_user
@@ -607,8 +608,8 @@ async def login(
 @app.post("/auth/refresh", tags=["Authentication"])
 @limiter.limit("30/minute")
 async def refresh(
+    request: Request,
     refresh_token: str = Form(...),
-    request: Request = None,
 ):
     """Refresh access token."""
     from shared.auth import refresh_user_token
@@ -625,7 +626,7 @@ async def refresh(
 
 @app.get("/auth/me", tags=["Authentication"])
 @limiter.limit("60/minute")
-async def get_current_user_info(current_user: TokenData = Depends(get_current_user)):
+async def get_current_user_info(request: Request, current_user: TokenData = Depends(get_current_user)):
     """Get current user information."""
     user = await user_store.get_user_by_id(current_user.user_id)
     if not user:
@@ -743,7 +744,7 @@ async def list_collections():
     tags=["Query"],
 )
 @limiter.limit("30/minute")
-async def query_knowledge_base(request: QueryRequest, http_request: Request):
+async def query_knowledge_base(request: Request, query_request: QueryRequest):
     """
     Query the RAG knowledge base.
 
@@ -758,14 +759,14 @@ async def query_knowledge_base(request: QueryRequest, http_request: Request):
     start_time = time.time()
 
     try:
-        logger.info(f"Query: {request.question[:100]}...")
+        logger.info(f"Query: {query_request.question[:100]}...")
 
         # Process query
         answer, sources_data = rag_chain.query(
-            question=request.question,
-            doc_type_filter=request.doc_type_filter,
-            use_rerank=request.use_rerank,
-            top_k=request.top_k,
+            question=query_request.question,
+            doc_type_filter=query_request.doc_type_filter,
+            use_rerank=query_request.use_rerank,
+            top_k=query_request.top_k,
         )
 
         # Format sources for response
@@ -790,7 +791,7 @@ async def query_knowledge_base(request: QueryRequest, http_request: Request):
         return QueryResponse(
             answer=answer,
             sources=sources,
-            query=request.question,
+            query=query_request.question,
             processing_time=processing_time,
             environment=ENVIRONMENT,
         )
@@ -818,9 +819,9 @@ async def query_knowledge_base(request: QueryRequest, http_request: Request):
 )
 @limiter.limit("10/minute")
 async def ingest_documents(
+    request: Request,
     file: UploadFile = File(..., description="Document file to ingest"),
     doc_type: str | None = Form(None, description="Document type override (aml, kyc, fraud, regulation, general)"),
-    http_request: Request = None,
 ):
     """
     Ingest a document into the knowledge base.

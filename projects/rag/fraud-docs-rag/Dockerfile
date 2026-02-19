@@ -47,8 +47,8 @@ WORKDIR /build
 # Copy requirements first for better caching
 COPY requirements.txt .
 
-# Install Python dependencies
-RUN pip install -r requirements.txt
+# Install Python dependencies with CPU-only PyTorch
+RUN pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt
 
 # Download models during build (optional - will cache models)
 # This reduces startup time but increases image size
@@ -75,7 +75,10 @@ ENV PYTHONUNBUFFERED=${PYTHONUNBUFFERED} \
     PYTHONPATH="/app/src:$PYTHONPATH" \
     ENVIRONMENT="production" \
     HOST="0.0.0.0" \
-    PORT="8000"
+    PORT="8000" \
+    TRANSFORMERS_CACHE=/app/data/cache \
+    HF_HOME=/app/data/cache \
+    SENTENCE_TRANSFORMERS_HOME=/app/data/cache
 
 # Install runtime dependencies only
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -97,13 +100,15 @@ RUN groupadd -g ${APP_GID} ${APP_USER} \
 # Copy virtual environment from builder
 COPY --from=builder /opt/venv /opt/venv
 
-# Create application directories
+# Create application directories and user cache
 RUN mkdir -p /app/data/documents \
              /app/data/raw \
              /app/data/chroma_db \
              /app/data/vector_store \
+             /app/data/cache \
              /app/logs \
-    && chown -R ${APP_USER}:${APP_USER} /app
+             /home/${APP_USER}/.cache \
+    && chown -R ${APP_USER}:${APP_USER} /app /home/${APP_USER}/.cache
 
 # Set working directory
 WORKDIR /app
@@ -122,9 +127,9 @@ USER ${APP_USER}
 # Expose application port
 EXPOSE 8000
 
-# Health check
+# Health check (using Python urllib instead of curl)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
 
 # Default command
 CMD ["uvicorn", "fraud_docs_rag.api.main:app", \

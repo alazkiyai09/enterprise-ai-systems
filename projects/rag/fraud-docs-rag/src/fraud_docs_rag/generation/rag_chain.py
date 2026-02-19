@@ -17,6 +17,7 @@ from typing import Any
 
 from llama_index.core import VectorStoreIndex
 from llama_index.core.llms import ChatMessage, MessageRole
+from llama_index.core.llms.custom import CustomLLM
 from llama_index.llms.ollama import Ollama
 from llama_index.llms.openai import OpenAI
 
@@ -119,8 +120,8 @@ class RAGChain:
         },
         Environment.DEMO: {
             "provider": "openai_compatible",
-            "model": "glm-4-plus",
-            "base_url": "https://open.bigmodel.cn/api/paas/v4",
+            "model": "glm-5",  # GLM-5 model
+            "base_url": "https://api.z.ai/api/anthropic",  # Z.ai API endpoint
             "api_key_env": "ZHIPUAI_API_KEY",
             "temperature": 0.7,
             "max_tokens": 4096,
@@ -268,12 +269,12 @@ class RAGChain:
             timeout=self.config["timeout"],
         )
 
-    def _init_openai_compatible(self) -> OpenAI:
+    def _init_openai_compatible(self) -> "OpenAICompatibleLLM":
         """
         Initialize OpenAI-compatible API (GLM-4) for demo environment.
 
         Returns:
-            Configured OpenAI-compatible instance for GLM-4
+            Configured OpenAI-compatible LLM instance
 
         Raises:
             EnvironmentError: If ZHIPUAI_API_KEY is not set
@@ -291,7 +292,8 @@ class RAGChain:
             f"Initializing OpenAI-compatible API (GLM-4) at: {self.config['base_url']}"
         )
 
-        return OpenAI(
+        # Use custom wrapper to bypass llama-index model validation
+        return OpenAICompatibleLLM(
             model=self.config["model"],
             api_key=api_key,
             base_url=self.config["base_url"],
@@ -786,6 +788,191 @@ def main() -> None:
     except Exception as e:
         logger.error(f"Demonstration failed: {e}", exc_info=True)
         sys.exit(1)
+
+
+class OpenAICompatibleLLM(CustomLLM):
+    """
+    Custom LLM wrapper for OpenAI-compatible and Anthropic-compatible APIs.
+    Bypasses llama-index's strict model name validation.
+    """
+
+    model: str = "glm-5"
+    api_key: str = ""
+    base_url: str = ""
+    temperature: float = 0.7
+    max_tokens: int = 4096
+    timeout: int = 300
+    context_window: int = 128000
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._client = None
+
+    @property
+    def client(self):
+        if self._client is None:
+            # Use anthropic library for z.ai endpoint
+            if "anthropic" in self.base_url or "z.ai" in self.base_url:
+                import anthropic
+                self._client = anthropic.Anthropic(
+                    api_key=self.api_key,
+                    base_url=self.base_url,
+                    timeout=self.timeout,
+                )
+            else:
+                from openai import OpenAI
+                self._client = OpenAI(
+                    api_key=self.api_key,
+                    base_url=self.base_url,
+                    timeout=self.timeout,
+                )
+        return self._client
+
+    @property
+    def is_anthropic(self):
+        return "anthropic" in self.base_url or "z.ai" in self.base_url
+
+    @property
+    def metadata(self):
+        from llama_index.core.llms import LLMMetadata
+        return LLMMetadata(
+            context_window=self.context_window,
+            num_output=self.max_tokens,
+            model_name=self.model,
+            is_chat_model=True,
+        )
+
+    def chat(self, messages, **kwargs):
+        """Sync chat completion."""
+        from llama_index.core.llms import ChatResponse
+
+        if self.is_anthropic:
+            # Anthropic API format
+            system_msg = ""
+            chat_messages = []
+            for msg in messages:
+                role = msg.role.value if hasattr(msg.role, 'value') else str(msg.role)
+                if role == "system":
+                    system_msg = msg.content
+                else:
+                    chat_messages.append({"role": role, "content": msg.content})
+
+            response = self.client.messages.create(
+                model=self.model,
+                max_tokens=self.max_tokens,
+                system=system_msg if system_msg else "You are a helpful assistant.",
+                messages=chat_messages,
+            )
+
+            content = response.content[0].text if response.content else ""
+            return ChatResponse(
+                message=ChatMessage(
+                    role=MessageRole.ASSISTANT,
+                    content=content,
+                ),
+                raw=response.model_dump() if hasattr(response, 'model_dump') else {},
+            )
+        else:
+            # OpenAI API format
+            formatted_messages = [
+                {"role": msg.role.value if hasattr(msg.role, 'value') else msg.role, "content": msg.content}
+                for msg in messages
+            ]
+
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=formatted_messages,
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
+            )
+
+            return ChatResponse(
+                message=ChatMessage(
+                    role=MessageRole.ASSISTANT,
+                    content=response.choices[0].message.content,
+                ),
+                raw=response.model_dump(),
+            )
+
+    def stream_chat(self, messages, **kwargs):
+        """Stream chat completion."""
+        from llama_index.core.llms import ChatResponse
+
+        if self.is_anthropic:
+            # Anthropic API format
+            system_msg = ""
+            chat_messages = []
+            for msg in messages:
+                role = msg.role.value if hasattr(msg.role, 'value') else str(msg.role)
+                if role == "system":
+                    system_msg = msg.content
+                else:
+                    chat_messages.append({"role": role, "content": msg.content})
+
+            with self.client.messages.stream(
+                model=self.model,
+                max_tokens=self.max_tokens,
+                system=system_msg if system_msg else "You are a helpful assistant.",
+                messages=chat_messages,
+            ) as stream:
+                content = ""
+                for text in stream.text_stream:
+                    content += text
+                    yield ChatResponse(
+                        message=ChatMessage(
+                            role=MessageRole.ASSISTANT,
+                            content=content,
+                        ),
+                        delta=text,
+                        raw={},
+                    )
+        else:
+            # OpenAI API format
+            formatted_messages = [
+                {"role": msg.role.value if hasattr(msg.role, 'value') else msg.role, "content": msg.content}
+                for msg in messages
+            ]
+
+            stream = self.client.chat.completions.create(
+                model=self.model,
+                messages=formatted_messages,
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
+                stream=True,
+            )
+
+            content = ""
+            for chunk in stream:
+                if chunk.choices[0].delta.content:
+                    content += chunk.choices[0].delta.content
+                    yield ChatResponse(
+                        message=ChatMessage(
+                            role=MessageRole.ASSISTANT,
+                            content=content,
+                        ),
+                        delta=chunk.choices[0].delta.content,
+                        raw=chunk.model_dump() if hasattr(chunk, 'model_dump') else {},
+                    )
+
+    def complete(self, prompt, **kwargs):
+        """Sync completion (uses chat under the hood)."""
+        messages = [ChatMessage(role=MessageRole.USER, content=prompt)]
+        response = self.chat(messages, **kwargs)
+        from llama_index.core.llms import CompletionResponse
+        return CompletionResponse(text=response.message.content, raw=response.raw)
+
+    def stream_complete(self, prompt, **kwargs):
+        """Stream completion (uses chat under the hood)."""
+        messages = [ChatMessage(role=MessageRole.USER, content=prompt)]
+        content = ""
+        for partial_response in self.stream_chat(messages, **kwargs):
+            content = partial_response.message.content
+            from llama_index.core.llms import CompletionResponse
+            yield CompletionResponse(
+                text=content,
+                delta=partial_response.delta if hasattr(partial_response, 'delta') else "",
+                raw=partial_response.raw if hasattr(partial_response, 'raw') else {},
+            )
 
 
 if __name__ == "__main__":
