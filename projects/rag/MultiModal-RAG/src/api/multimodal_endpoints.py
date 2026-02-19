@@ -133,7 +133,9 @@ def get_retriever() -> MultiModalRetriever:
     global retriever
     if retriever is None:
         logger.info("Initializing MultiModalRetriever...")
-        retriever = create_retriever()
+        # Disable CLIP to avoid dimension mismatch with text embeddings
+        # Text embeddings: 384d (all-MiniLM-L6-v2), CLIP: 512d
+        retriever = create_retriever(enable_clip=False)
     return retriever
 
 
