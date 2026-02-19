@@ -1,114 +1,101 @@
 """
 Agent state definition for LangGraph workflow.
 
-This module defines the TypedDict state structure and helper functions
-for state management throughout the fraud triage workflow.
+This module re-exports the canonical FraudTriageState from src.models.state
+and provides a compatibility layer for create_initial_state.
 """
 
-from typing import Any, Required, TypedDict, override
+from datetime import datetime
+from typing import Any
 
 from langchain_core.messages import BaseMessage
 
+# Import the canonical state definition from models.state
+from src.models.state import (
+    AlertType,
+    FraudTriageState,
+    RiskLevel,
+    create_initial_state as create_state_from_models,
+)
 
-class AgentState(TypedDict, total=False):
+# Re-export FraudTriageState as AgentState for backward compatibility
+AgentState = FraudTriageState
+
+
+def create_initial_state(
+    alert_id: str | dict[str, Any],
+    alert_data: dict[str, Any] | None = None,
+    alert_type: AlertType | str = AlertType.OTHER,
+    transaction_amount: float = 0.0,
+    customer_id: str = "",
+    **kwargs: Any,
+) -> FraudTriageState:
     """
-    LangGraph Agent State for fraud triage workflow.
+    Create initial fraud triage state from alert data.
 
-    This state flows through all nodes in the LangGraph workflow.
-    Each node can read and update specific fields in the state.
+    This is a compatibility wrapper that converts from the legacy alert_data dict
+    format to the new structured FraudTriageState.
 
-    Fields:
-        alert_id: Unique identifier for the alert
-        alert_data: Raw alert data from the input
-        transaction_history: Historical transactions for context
-        customer_profile: Customer profile information
-        device_fingerprint: Device and IP information
-        similar_alerts: Historical similar alerts for comparison
-        risk_score: Calculated risk score (0-100)
-        risk_factors: List of identified risk factors
-        confidence: Confidence in the assessment (0-1)
-        recommendation: Action recommendation
-        next_action: Next action to take (routes to different nodes)
-        requires_human_review: Whether human review is needed
-        human_review_required: Flag for human-in-the-loop
-        human_decision: Human reviewer's decision
-        human_reasoning: Human reviewer's reasoning
-        messages: Message history for LLM context
-        iteration_count: Number of workflow iterations
-        error_message: Any error that occurred during processing
-    """
-
-    # Input data
-    alert_id: Required[str]
-    alert_data: Required[dict[str, Any]]
-
-    # Gathered context
-    transaction_history: list[dict[str, Any]]
-    customer_profile: dict[str, Any]
-    device_fingerprint: dict[str, Any]
-    similar_alerts: list[dict[str, Any]]
-
-    # Risk assessment
-    risk_score: int
-    risk_factors: list[str]
-    confidence: float
-
-    # Decision making
-    recommendation: str
-    next_action: str
-    requires_human_review: bool
-
-    # Human-in-the-loop
-    human_review_required: bool
-    human_decision: str | None
-    human_reasoning: str | None
-
-    # Internal state
-    messages: list[BaseMessage]
-    iteration_count: int
-    error_message: str | None
-
-
-def create_initial_state(alert_data: dict[str, Any]) -> AgentState:
-    """
-    Create initial agent state from alert data.
+    Supports two calling patterns:
+    1. Legacy: create_initial_state(alert_data_dict) - single dict argument
+    2. New: create_initial_state(alert_id, alert_data, ...) - named arguments
 
     Args:
-        alert_data: Raw alert data
+        alert_id: Unique alert identifier OR legacy alert_data dict
+        alert_data: Raw alert data (legacy format, optional)
+        alert_type: Type of fraud alert (defaults to OTHER if not specified)
+        transaction_amount: Amount of flagged transaction
+        customer_id: Customer identifier
+        **kwargs: Additional optional fields
 
     Returns:
-        Initial agent state with required fields populated
+        Initial state dictionary with required fields populated
     """
-    alert_id = alert_data.get("alert_id") or alert_data.get("id") or "unknown"
+    # Handle legacy calling pattern: create_initial_state(alert_data_dict)
+    if isinstance(alert_id, dict):
+        alert_data = alert_id
+        alert_id = alert_data.get("alert_id") or alert_data.get("id") or "unknown"
 
-    return {
-        "alert_id": alert_id,
-        "alert_data": alert_data,
-        "transaction_history": [],
-        "customer_profile": {},
-        "device_fingerprint": {},
-        "similar_alerts": [],
-        "risk_score": 0,
-        "risk_factors": [],
-        "confidence": 0.0,
-        "recommendation": "",
-        "next_action": "gather_context",
-        "requires_human_review": False,
-        "human_review_required": False,
-        "human_decision": None,
-        "human_reasoning": None,
-        "messages": [],
-        "iteration_count": 0,
-        "error_message": None,
-    }
+    # If alert_data dict is provided, extract values from it
+    if alert_data:
+        alert_id = alert_data.get("alert_id") or alert_data.get("id") or alert_id
+        customer_id = customer_id or alert_data.get("customer_id", "")
+        transaction_amount = float(
+            alert_data.get("transaction", {}).get("amount", transaction_amount)
+        )
+        alert_type_str = alert_data.get("alert_type", alert_type)
+        if isinstance(alert_type_str, str):
+            try:
+                alert_type = AlertType(alert_type_str)
+            except ValueError:
+                alert_type = AlertType.OTHER
+
+        # Map alert_data fields to state fields
+        kwargs.setdefault("account_id", alert_data.get("account_id"))
+        kwargs.setdefault("transaction_id", alert_data.get("transaction", {}).get("transaction_id"))
+        kwargs.setdefault("transaction_country", alert_data.get("transaction", {}).get("location_country"))
+        kwargs.setdefault("transaction_device_id", alert_data.get("transaction", {}).get("device_id"))
+        kwargs.setdefault("transaction_ip", alert_data.get("transaction", {}).get("ip_address"))
+        kwargs.setdefault("rule_id", alert_data.get("rule_id"))
+        kwargs.setdefault("alert_reason", alert_data.get("alert_reason"))
+        # Store alert_data for backward compatibility
+        kwargs.setdefault("alert_data", alert_data)
+
+    return create_state_from_models(
+        alert_id=alert_id,
+        alert_type=alert_type,
+        transaction_amount=transaction_amount,
+        customer_id=customer_id,
+        **kwargs,
+    )
 
 
-def state_to_dict(state: AgentState) -> dict[str, Any]:
+def state_to_dict(state: FraudTriageState) -> dict[str, Any]:
     """
-    Convert agent state to a regular dictionary for serialization.
+    Convert fraud triage state to a regular dictionary for serialization.
 
     Args:
-        state: Agent state
+        state: Fraud triage state
 
     Returns:
         Dictionary representation of state
@@ -119,7 +106,20 @@ def state_to_dict(state: AgentState) -> dict[str, Any]:
         if isinstance(value, list) and value and isinstance(value[0], BaseMessage):
             # Convert BaseMessage list to dict
             result[key] = [msg.dict() for msg in value]
+        elif isinstance(value, datetime):
+            result[key] = value.isoformat()
         else:
             result[key] = value
 
     return result
+
+
+# Re-export for backward compatibility
+__all__ = [
+    "FraudTriageState",
+    "AgentState",  # Alias for backward compatibility
+    "create_initial_state",
+    "state_to_dict",
+    "AlertType",
+    "RiskLevel",
+]

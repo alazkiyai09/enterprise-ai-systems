@@ -13,6 +13,8 @@ import pytest
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
+# Add shared modules to path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "shared"))
 
 from src.config.settings import settings
 
@@ -24,10 +26,22 @@ def reset_settings():
     from src.config.settings import get_settings
     get_settings.cache_clear()
 
+    # Reset LLM cache to ensure fresh instance for each test
+    import src.agents.nodes as nodes_module
+    nodes_module._llm = None
+
+    # Reset graph singleton
+    import src.agents.graph as graph_module
+    graph_module._fraud_triage_graph = None
+
 
 @pytest.fixture
 def mock_llm(monkeypatch):
     """Mock LLM for testing."""
+    # Reset LLM cache before setting up mock
+    import src.agents.nodes as nodes_module
+    nodes_module._llm = None
+
     mock_response = MagicMock()
     mock_response.content = """
     Risk Score: 65
@@ -42,8 +56,9 @@ def mock_llm(monkeypatch):
     mock_llm_instance = AsyncMock()
     mock_llm_instance.ainvoke.return_value = mock_response
 
-    # Patch the LLM creation
+    # Patch the LLM creation and get functions
     monkeypatch.setattr("src.agents.nodes.create_llm", lambda: mock_llm_instance)
+    monkeypatch.setattr("src.agents.nodes.get_llm", lambda: mock_llm_instance)
 
     return mock_llm_instance
 

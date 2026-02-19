@@ -26,6 +26,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.language_models import BaseChatModel
 from langchain_openai import ChatOpenAI
+from langchain_anthropic import ChatAnthropic
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 
@@ -117,7 +118,7 @@ def create_llm(
         )
 
     elif env == "demo":
-        # Use GLM-4.7 for demos (OpenAI-compatible API)
+        # Use GLM-5 via Anthropic-compatible API
         api_key = os.getenv("GLM_API_KEY")
         if not api_key:
             raise ValueError(
@@ -125,14 +126,14 @@ def create_llm(
                 "Get one at: https://open.bigmodel.cn/"
             )
 
-        base_url = os.getenv("GLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4")
-        model_name = model or os.getenv("GLM_MODEL", "glm-4-plus")
+        base_url = os.getenv("GLM_BASE_URL", "https://api.z.ai/api/anthropic")
+        model_name = model or os.getenv("GLM_MODEL", "glm-5")
 
-        logger.info(f"🎯 Using GLM-4.7 (demo): {model_name}")
+        logger.info(f"🎯 Using GLM-5 (demo): {model_name} via Anthropic-compatible API")
 
-        return ChatOpenAI(
-            base_url=base_url,
+        return ChatAnthropic(
             api_key=api_key,
+            base_url=base_url,
             model=model_name,
             temperature=AgentConfig.TEMPERATURE,
             max_tokens=AgentConfig.MAX_TOKENS,

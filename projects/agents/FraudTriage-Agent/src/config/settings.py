@@ -4,10 +4,11 @@ Application settings using Pydantic Settings.
 Loads configuration from environment variables and .env file.
 """
 
+import secrets
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, ValidationError, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -105,9 +106,25 @@ class Settings(BaseSettings):
     )
 
     # -------------------------------------------------------------------------
+    # Environment
+    # -------------------------------------------------------------------------
+    environment: str = Field(default="development", description="Environment (development/production)")
+
+    # -------------------------------------------------------------------------
     # Security
     # -------------------------------------------------------------------------
-    secret_key: str = Field(default="change-me-in-production", description="Secret key for signing")
+    # Default SECRET_KEY values that should NOT be used in production
+    _DEFAULT_SECRET_KEYS = {
+        "change-me-in-production",
+        "your-secret-key-change-in-production",
+        "secret",
+        "",
+    }
+
+    secret_key: str = Field(
+        default="change-me-in-production",
+        description="Secret key for signing JWT and other sensitive data"
+    )
     api_key_header: str = Field(default="X-API-Key", description="API key header name")
     allowed_origins: str = Field(
         default="http://localhost:3000,http://localhost:8000",
@@ -121,6 +138,32 @@ class Settings(BaseSettings):
     enable_cache: bool = Field(default=True, description="Enable caching")
     enable_audit_logging: bool = Field(default=True, description="Enable audit logging")
     mock_external_apis: bool = Field(default=True, description="Use mock external APIs")
+
+    # -------------------------------------------------------------------------
+    # Validation
+    # -------------------------------------------------------------------------
+    @model_validator(mode="after")
+    def validate_security_settings(self) -> "Settings":
+        """
+        Validate security settings.
+
+        Raises:
+            ValueError: If SECRET_KEY is using a default value in production.
+        """
+        if self.environment.lower() == "production":
+            if self.secret_key in self._DEFAULT_SECRET_KEYS:
+                raise ValueError(
+                    "INSECURE CONFIGURATION: Default SECRET_KEY detected in production environment. "
+                    "Please set a strong, randomly generated SECRET_KEY in your environment variables. "
+                    "Generate one with: python -c 'import secrets; print(secrets.token_urlsafe(32))'"
+                )
+            if len(self.secret_key) < 32:
+                raise ValueError(
+                    f"INSECURE CONFIGURATION: SECRET_KEY is too short ({len(self.secret_key)} chars). "
+                    "Use at least 32 characters for production. "
+                    "Generate one with: python -c 'import secrets; print(secrets.token_urlsafe(32))'"
+                )
+        return self
 
     # -------------------------------------------------------------------------
     # Paths

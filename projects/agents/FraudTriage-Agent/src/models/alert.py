@@ -10,7 +10,7 @@ from enum import Enum
 from typing import Any
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 
 class TransactionType(str, Enum):
@@ -65,7 +65,12 @@ class Transaction(BaseModel):
     ip_address: str | None = Field(None, description="IP address")
     status: str = Field(default="completed", description="Transaction status")
 
-    model_config = {"json_encoders": {datetime: lambda v: v.isoformat()}}
+    model_config = ConfigDict(use_enum_values=True)
+
+    @field_serializer("timestamp", when_used="json")
+    def serialize_timestamp(self, v: datetime) -> str:
+        """Serialize datetime to ISO format string."""
+        return v.isoformat()
 
 
 class Alert(BaseModel):
@@ -79,7 +84,12 @@ class Alert(BaseModel):
     updated_at: datetime = Field(default_factory=datetime.utcnow, description="Last update timestamp")
     metadata: dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 
-    model_config = {"json_encoders": {datetime: lambda v: v.isoformat()}}
+    model_config = ConfigDict(use_enum_values=True)
+
+    @field_serializer("created_at", "updated_at", when_used="json")
+    def serialize_datetime(self, v: datetime) -> str:
+        """Serialize datetime to ISO format string."""
+        return v.isoformat()
 
 
 class FraudAlert(Alert):
@@ -112,4 +122,9 @@ class FraudAlert(Alert):
     resolved: bool = Field(default=False, description="Whether alert is resolved")
     resolution_note: str | None = Field(None, description="Resolution notes")
 
-    model_config = {"json_encoders": {datetime: lambda v: v.isoformat()}}
+    model_config = ConfigDict(use_enum_values=True)
+
+    @field_serializer("created_at", "updated_at", when_used="json")
+    def serialize_datetime(self, v: datetime) -> str:
+        """Serialize datetime to ISO format string."""
+        return v.isoformat()

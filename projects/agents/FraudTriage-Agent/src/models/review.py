@@ -9,7 +9,7 @@ from enum import Enum
 from typing import Any
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 
 class HumanReviewDecision(str, Enum):
@@ -60,9 +60,8 @@ class HumanReview(BaseModel):
         le=100
     )
 
-    model_config = {
-        "json_encoders": {datetime: lambda v: v.isoformat()},
-        "json_schema_extra": {
+    model_config = ConfigDict(
+        json_schema_extra={
             "examples": [{
                 "review_id": "550e8400-e29b-41d4-a716-446655440000",
                 "alert_id": "alert-12345",
@@ -80,7 +79,12 @@ class HumanReview(BaseModel):
                 "correct_risk_score": 80
             }]
         }
-    }
+    )
+
+    @field_serializer("reviewed_at", when_used="json")
+    def serialize_reviewed_at(self, v: datetime) -> str:
+        """Serialize datetime to ISO format string."""
+        return v.isoformat()
 
 
 class ReviewRequest(BaseModel):
@@ -95,8 +99,8 @@ class ReviewRequest(BaseModel):
     agreed_with_agent: bool | None = Field(None, description="Agreement with agent recommendation")
     correct_risk_score: int | None = Field(None, description="Correct risk score opinion", ge=0, le=100)
 
-    model_config = {
-        "json_schema_extra": {
+    model_config = ConfigDict(
+        json_schema_extra={
             "examples": [{
                 "reviewer_id": "analyst-001",
                 "reviewer_name": "Jane Smith",
@@ -108,4 +112,4 @@ class ReviewRequest(BaseModel):
                 "correct_risk_score": 85
             }]
         }
-    }
+    )

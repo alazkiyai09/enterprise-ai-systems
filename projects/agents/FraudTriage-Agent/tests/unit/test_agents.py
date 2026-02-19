@@ -14,6 +14,7 @@ from src.agents.nodes import (
     route_alert,
 )
 from src.agents.state import create_initial_state, AgentState
+from src.models.state import AlertType
 
 
 @pytest.mark.asyncio
@@ -110,6 +111,9 @@ class TestRouteAlert:
         """Test routing for high-risk alerts."""
         state: AgentState = {
             "alert_id": "test-001",
+            "alert_type": AlertType.OTHER,
+            "transaction_amount": 2500.0,
+            "customer_id": "cust-001",
             "alert_data": {},
             "risk_score": 85,
             "next_action": "create_case",
@@ -136,6 +140,9 @@ class TestRouteAlert:
         """Test routing for low-risk alerts."""
         state: AgentState = {
             "alert_id": "test-002",
+            "alert_type": AlertType.OTHER,
+            "transaction_amount": 150.0,
+            "customer_id": "cust-002",
             "alert_data": {},
             "risk_score": 25,
             "next_action": "auto_close",
@@ -162,11 +169,12 @@ class TestRouteAlert:
         """Test routing after human review confirms fraud."""
         state: AgentState = {
             "alert_id": "test-003",
-            "alert_data": {},
+            "alert_type": AlertType.OTHER,
+            "transaction_amount": 2500.0,
+            "customer_id": "cust-003",
             "risk_score": 70,
             "next_action": "awaiting_human_review",
             "requires_human_review": True,
-            "human_review_required": True,
             "human_decision": "confirm_fraud",
             "messages": [],
             "transaction_history": [],
@@ -176,7 +184,6 @@ class TestRouteAlert:
             "risk_factors": [],
             "confidence": 0.0,
             "recommendation": "",
-            "human_reasoning": None,
             "iteration_count": 0,
             "error_message": None,
         }
@@ -188,6 +195,9 @@ class TestRouteAlert:
         """Test routing after human review confirms legitimate."""
         state: AgentState = {
             "alert_id": "test-004",
+            "alert_type": AlertType.OTHER,
+            "transaction_amount": 1000.0,
+            "customer_id": "cust-004",
             "alert_data": {},
             "risk_score": 70,
             "next_action": "awaiting_human_review",

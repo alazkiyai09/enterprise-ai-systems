@@ -125,12 +125,15 @@ def _mock_device_fingerprint(device_id: str) -> dict[str, Any]:
 
 def _mock_ip_reputation(ip_address: str) -> dict[str, Any]:
     """Generate mock IP reputation."""
+    # Well-known safe IPs
+    safe_ips = {"8.8.8.8", "8.8.4.4", "1.1.1.1", "1.0.0.1"}
+
     # Some high-risk IPs based on patterns
     is_high_risk = any([
         ip_address.startswith("197."),  # Nigeria
         ip_address.startswith("41."),   # Nigeria
         ip_address.startswith("185."),  # Known proxy range
-        hash(ip_address) % 4 == 0,
+        (hash(ip_address) % 4 == 0 and ip_address not in safe_ips),
     ])
 
     country_map = {
@@ -139,6 +142,7 @@ def _mock_ip_reputation(ip_address: str) -> dict[str, Any]:
         "185.": "Russia",
         "5.": "United States",
         "8.": "United States",
+        "1.": "United States",  # Cloudflare and other US services
     }
 
     country = "Unknown"

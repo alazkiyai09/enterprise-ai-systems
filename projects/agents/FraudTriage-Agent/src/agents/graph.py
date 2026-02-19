@@ -17,7 +17,7 @@ from .nodes import (
     parse_alert_node,
     route_alert,
 )
-from .state import AgentState
+from src.models.state import FraudTriageState
 
 
 def create_fraud_triage_graph() -> "FraudTriageGraph":
@@ -28,7 +28,7 @@ def create_fraud_triage_graph() -> "FraudTriageGraph":
         Compiled LangGraph workflow
     """
     # Create the graph
-    workflow = StateGraph(AgentState)
+    workflow = StateGraph(FraudTriageState)
 
     # Add nodes
     workflow.add_node("parse_alert", parse_alert_node)
@@ -101,7 +101,11 @@ class FraudTriageGraph:
         from .state import create_initial_state
 
         # Create initial state
-        initial_state = create_initial_state(alert_data)
+        # Pass alert_data as keyword argument for compatibility with new signature
+        initial_state = create_initial_state(
+            alert_id=alert_data.get("alert_id") or alert_data.get("id") or "unknown",
+            alert_data=alert_data,
+        )
 
         # Configure run
         run_config = {
@@ -133,7 +137,11 @@ class FraudTriageGraph:
         from .state import create_initial_state
 
         # Create initial state
-        initial_state = create_initial_state(alert_data)
+        # Pass alert_data as keyword argument for compatibility with new signature
+        initial_state = create_initial_state(
+            alert_id=alert_data.get("alert_id") or alert_data.get("id") or "unknown",
+            alert_data=alert_data,
+        )
 
         # Configure run
         run_config = {

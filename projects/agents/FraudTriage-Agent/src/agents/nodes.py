@@ -5,6 +5,7 @@ Each node represents a step in the fraud alert triage process.
 """
 
 import logging
+import os
 from datetime import datetime
 from typing import Any, Literal, cast
 
@@ -14,6 +15,14 @@ from langchain_openai import ChatOpenAI
 
 from src.config.settings import settings
 from src.models.agent import RiskAssessment
+from src.models.state import (
+    AlertDecision,
+    AlertType,
+    FraudTriageState,
+    RiskLevel,
+    transition_to_stage,
+    WorkflowStage,
+)
 from src.tools import create_tool_registry
 from src.tools.customer_tools import get_customer_profile, get_customer_risk_history
 from src.tools.device_tools import check_ip_reputation, get_device_fingerprint
@@ -22,8 +31,6 @@ from src.tools.transaction_tools import (
     get_transaction_by_id,
     get_transaction_history,
 )
-
-from .state import AgentState
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +110,7 @@ Provide your risk assessment."""),
 ])
 
 
-async def parse_alert_node(state: AgentState) -> AgentState:
+async def parse_alert_node(state: FraudTriageState) -> FraudTriageState:
     """
     Parse and validate the incoming fraud alert.
 
@@ -140,7 +147,7 @@ async def parse_alert_node(state: AgentState) -> AgentState:
     return state
 
 
-async def gather_context_node(state: AgentState) -> AgentState:
+async def gather_context_node(state: FraudTriageState) -> FraudTriageState:
     """
     Gather context from multiple data sources.
 
@@ -206,7 +213,7 @@ async def gather_context_node(state: AgentState) -> AgentState:
     return state
 
 
-async def assess_risk_node(state: AgentState) -> AgentState:
+async def assess_risk_node(state: FraudTriageState) -> FraudTriageState:
     """
     Assess risk using LLM analysis.
 
@@ -238,22 +245,37 @@ async def assess_risk_node(state: AgentState) -> AgentState:
         state["risk_factors"] = risk_assessment.risk_factors
         state["confidence"] = risk_assessment.confidence
         state["recommendation"] = risk_assessment.reasoning
-        state["next_action"] = risk_assessment.suggested_action
+
+        # Map suggested_action to AlertDecision
+        suggested_action = risk_assessment.suggested_action
+        if suggested_action in ("auto_close", "monitor"):
+            state["decision"] = AlertDecision.AUTO_CLOSE
+            state["next_action"] = "auto_close"
+        elif suggested_action == "escalate_for_review":
+            state["decision"] = AlertDecision.REVIEW_REQUIRED
+            state["next_action"] = "escalate_for_review"
+        elif suggested_action == "create_case":
+            state["decision"] = AlertDecision.ESCALATE
+            state["next_action"] = "create_case"
+        else:
+            state["decision"] = AlertDecision.REVIEW_REQUIRED
+            state["next_action"] = "escalate_for_review"
 
         # Determine if human review is needed
         state["requires_human_review"] = state["risk_score"] >= settings.high_risk_threshold
-        state["human_review_required"] = state["requires_human_review"]
+        state["human_review_required"] = state["requires_human_review"]  # Legacy field
 
         logger.info(
             f"Risk assessment complete: score={state['risk_score']}, "
-            f"action={state['next_action']}, human_review={state['requires_human_review']}"
+            f"decision={state['decision']}, human_review={state['requires_human_review']}"
         )
 
     except Exception as e:
         logger.error(f"Error during risk assessment: {e}")
         state["error_message"] = str(e)
-        state["next_action"] = "escalate_for_review"  # Conservative fallback
-        state["risk_score"] = 50  # Default to medium risk
+        state["decision"] = AlertDecision.REVIEW_REQUIRED  # Conservative fallback
+        state["next_action"] = "escalate_for_review"  # Legacy field
+        state["risk_score"] = 50.0  # Default to medium risk
 
     state["messages"].append(AIMessage(content=response_text))
     state["iteration_count"] += 1
@@ -261,7 +283,7 @@ async def assess_risk_node(state: AgentState) -> AgentState:
     return state
 
 
-async def human_review_node(state: AgentState) -> AgentState:
+async def human_review_node(state: FraudTriageState) -> FraudTriageState:
     """
     Handle human-in-the-loop review for high-risk alerts.
 
@@ -282,58 +304,109 @@ async def human_review_node(state: AgentState) -> AgentState:
         )
     )
 
-    # Check if human decision has been provided
-    if state.get("human_decision"):
-        logger.info(f"Human decision received: {state['human_decision']}")
+    # Check if human decision has been provided (check both legacy and new fields)
+    human_decision = state.get("human_decision") or state.get("human_review_decision")
+    if human_decision:
+        logger.info(f"Human decision received: {human_decision}")
 
-        # Update next action based on human decision
-        decision = state["human_decision"].lower()
-        if "confirm_fraud" in decision or "fraud" in decision:
-            state["next_action"] = "create_case"
-        elif "legitimate" in decision or "false_positive" in decision:
-            state["next_action"] = "auto_close"
+        # Update decision based on human decision
+        if isinstance(human_decision, str):
+            # Parse legacy string decision
+            decision_str = human_decision.lower()
+            if "confirm_fraud" in decision_str or "fraud" in decision_str:
+                state["decision"] = AlertDecision.ESCALATE
+                state["next_action"] = "create_case"
+            elif "legitimate" in decision_str or "false_positive" in decision_str:
+                state["decision"] = AlertDecision.AUTO_CLOSE
+                state["next_action"] = "auto_close"
+            else:
+                state["decision"] = AlertDecision.REVIEW_REQUIRED
+                state["next_action"] = "awaiting_human_review"
         else:
-            state["next_action"] = "escalate"
+            # Use AlertDecision enum directly
+            state["decision"] = human_decision
+            # Set next_action for backward compatibility
+            if human_decision == AlertDecision.AUTO_CLOSE:
+                state["next_action"] = "auto_close"
+            elif human_decision in (AlertDecision.ESCALATE, AlertDecision.BLOCK_TRANSACTION):
+                state["next_action"] = "create_case"
+            else:
+                state["next_action"] = "awaiting_human_review"
+
+        # Sync legacy and new fields
+        state["human_review_decision"] = human_decision if not isinstance(human_decision, str) else (
+            AlertDecision.ESCALATE if "fraud" in str(human_decision).lower() else
+            AlertDecision.AUTO_CLOSE if "legitimate" in str(human_decision).lower() or "false_positive" in str(human_decision).lower() else
+            AlertDecision.REVIEW_REQUIRED
+        )
+        state["human_decision"] = str(human_decision) if isinstance(human_decision, str) else human_decision.value
     else:
-        # Still waiting for human review
+        # Still waiting for human review - keep REVIEW_REQUIRED
+        state["decision"] = AlertDecision.REVIEW_REQUIRED
         state["next_action"] = "awaiting_human_review"
 
-    state["iteration_count"] += 1
+    state["iteration_count"] = state.get("iteration_count", 0) + 1
 
     return state
 
 
-def route_alert(state: AgentState) -> Literal["auto_close", "escalate", "human_review", "end"]:
+def route_alert(state: FraudTriageState) -> Literal["auto_close", "escalate", "human_review", "end"]:
     """
     Route the alert based on risk assessment and decisions.
 
     This conditional edge determines which path the workflow takes.
+    Supports both legacy (next_action, human_decision) and new (decision, human_review_decision) fields.
     """
-    next_action = state.get("next_action", "")
-
-    logger.info(f"Routing alert {state['alert_id']}: action={next_action}")
-
-    # Check if awaiting human review
-    if next_action == "awaiting_human_review":
-        return "human_review"
-
-    # Check if human review has completed
-    if state.get("human_decision"):
-        decision = state["human_decision"].lower()
-        if "confirm_fraud" in decision or "fraud" in decision:
+    # Check both legacy human_decision and new human_review_decision first
+    # (highest priority - if human has decided, follow that decision)
+    human_decision = state.get("human_decision") or state.get("human_review_decision")
+    if human_decision:
+        decision_str = str(human_decision).lower()
+        if "confirm_fraud" in decision_str or "fraud" in decision_str:
             return "escalate"
-        elif "legitimate" in decision or "false_positive" in decision:
+        elif "legitimate" in decision_str or "false_positive" in decision_str or "auto_close" in decision_str:
             return "auto_close"
 
-    # Route based on risk score and action
-    risk_score = state.get("risk_score", 0)
+    # Check for legacy next_action field second for backward compatibility
+    next_action = state.get("next_action")
+    if next_action:
+        logger.info(f"Routing alert {state['alert_id']}: next_action={next_action}")
 
-    if risk_score >= settings.high_risk_threshold or next_action == "create_case":
-        return "escalate"
-    elif risk_score <= settings.medium_risk_threshold or next_action == "auto_close":
+        # Handle awaiting human review state (only if no human decision yet)
+        if next_action == "awaiting_human_review" and not human_decision:
+            return "human_review"
+
+        # Route based on next_action
+        if next_action == "auto_close":
+            return "auto_close"
+        elif next_action in ("create_case", "escalate_for_review", "escalate"):
+            return "escalate"
+        elif next_action == "monitor":
+            # Monitor routes to escalate for now
+            return "escalate"
+
+    # Fall back to new decision field
+    decision = state.get("decision", AlertDecision.REVIEW_REQUIRED)
+    logger.info(f"Routing alert {state['alert_id']}: decision={decision}")
+
+    # If human review is required but no decision has been made, route to human review
+    if state.get("requires_human_review", False) and not human_decision:
+        return "human_review"
+
+    # Route based on decision
+    if isinstance(decision, str):
+        decision_str = decision.lower()
+        if "auto_close" in decision_str:
+            return "auto_close"
+        elif "escalate" in decision_str or "block" in decision_str or "review" in decision_str:
+            return "escalate"
+    elif decision == AlertDecision.AUTO_CLOSE:
         return "auto_close"
-    else:
+    elif decision in (AlertDecision.ESCALATE, AlertDecision.BLOCK_TRANSACTION, AlertDecision.REVIEW_REQUIRED):
         return "escalate"
+
+    # Default to escalate for safety
+    return "escalate"
 
 
 # Helper functions
@@ -367,7 +440,7 @@ def _format_context_summary(context: dict[str, Any]) -> str:
     return "\n".join(summary_parts) if summary_parts else "No additional context available."
 
 
-def _format_context_summary_for_llm(state: AgentState) -> str:
+def _format_context_summary_for_llm(state: FraudTriageState) -> str:
     """Format context for LLM consumption."""
     parts = []
 

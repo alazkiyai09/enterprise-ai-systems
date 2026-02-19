@@ -16,6 +16,7 @@ and stores results in-memory for demo purposes.
 
 import asyncio
 import logging
+import os
 from datetime import datetime
 from typing import Any
 
@@ -84,7 +85,7 @@ class APIConfig:
     ALLOW_HEADERS = ["*"]
 
     # Agent settings
-    AGENT_ENVIRONMENT = "development"  # Can be overridden via ENVIRONMENT env var
+    AGENT_ENVIRONMENT = os.getenv("ENVIRONMENT", "development")  # development, demo, or production
 
     # Storage
     ALERT_STORE_MAX_SIZE = 1000  # Max alerts to keep in memory
@@ -379,7 +380,7 @@ app.add_middleware(
 )
 
 # Install security filter for logs
-install_security_filter()
+install_security_filter(logger)
 
 # Register error handlers
 register_error_handlers(app)
@@ -559,9 +560,9 @@ async def register(
 @app.post("/auth/login", tags=["Authentication"])
 @limiter.limit("20/minute")
 async def login(
+    request: Request,
     username: str = Form(...),
     password: str = Form(...),
-    request: Request = None,
 ):
     """Login and receive access token."""
     from shared.auth import authenticate_user, login_user
@@ -581,8 +582,8 @@ async def login(
 @app.post("/auth/refresh", tags=["Authentication"])
 @limiter.limit("30/minute")
 async def refresh(
+    request: Request,
     refresh_token: str = Form(...),
-    request: Request = None,
 ):
     """Refresh access token."""
     from shared.auth import refresh_user_token
@@ -599,7 +600,7 @@ async def refresh(
 
 @app.get("/auth/me", tags=["Authentication"])
 @limiter.limit("60/minute")
-async def get_current_user_info(current_user: TokenData = Depends(get_current_user)):
+async def get_current_user_info(request: Request, current_user: TokenData = Depends(get_current_user)):
     """Get current user information."""
     user = await user_store.get_user_by_id(current_user.user_id)
     if not user:
@@ -665,9 +666,9 @@ async def health_check() -> HealthResponse:
 @app.post("/triage", response_model=TriageResponse, status_code=status.HTTP_202_ACCEPTED)
 @limiter.limit("30/minute")
 async def submit_alert(
-    request: TriageRequest,
+    request: Request,
+    triage_request: TriageRequest,
     background_tasks: BackgroundTasks,
-    http_request: Request = None,
 ) -> TriageResponse:
     """
     Submit a fraud alert for triage analysis.
@@ -685,11 +686,11 @@ async def submit_alert(
     Raises:
         HTTPException: If alert_id already exists
     """
-    alert_id = request.alert_id
+    alert_id = triage_request.alert_id
 
     logger.info(
         f"Received alert submission: {alert_id} - "
-        f"Type: {request.alert_type}, Amount: ${request.transaction_amount:.2f}"
+        f"Type: {triage_request.alert_type}, Amount: ${triage_request.transaction_amount:.2f}"
     )
 
     # Check if alert already exists
@@ -725,13 +726,13 @@ async def submit_alert(
     background_tasks.add_task(
         process_alert_async,
         alert_id=alert_id,
-        alert_type=request.alert_type,
-        transaction_amount=request.transaction_amount,
-        customer_id=request.customer_id,
-        transaction_country=request.transaction_country,
-        transaction_device_id=request.transaction_device_id,
-        merchant_name=request.merchant_name,
-        alert_reason=request.alert_reason,
+        alert_type=triage_request.alert_type,
+        transaction_amount=triage_request.transaction_amount,
+        customer_id=triage_request.customer_id,
+        transaction_country=triage_request.transaction_country,
+        transaction_device_id=triage_request.transaction_device_id,
+        merchant_name=triage_request.merchant_name,
+        alert_reason=triage_request.alert_reason,
     )
 
     logger.info(f"Alert {alert_id} accepted for processing")

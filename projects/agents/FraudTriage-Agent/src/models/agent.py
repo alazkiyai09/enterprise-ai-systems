@@ -8,7 +8,7 @@ and result models for agent outputs.
 from typing import Any, Required, TypedDict, override
 
 from langchain_core.messages import BaseMessage
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class AgentState(TypedDict, total=False):
@@ -96,10 +96,8 @@ class TriageResult(BaseModel):
     model_used: str | None = Field(None, description="LLM model used")
     timestamp: str = Field(..., description="Analysis timestamp")
 
-    class Config:
-        """Pydantic config."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "alert_id": "alert-12345",
                 "risk_score": 75,
@@ -122,6 +120,7 @@ class TriageResult(BaseModel):
                 "timestamp": "2025-01-30T12:34:56Z"
             }
         }
+    )
 
 
 class RiskAssessment(BaseModel):
@@ -136,10 +135,8 @@ class RiskAssessment(BaseModel):
     confidence: float = Field(..., description="Confidence level (0-1)", ge=0, le=1)
     suggested_action: str = Field(..., description="Suggested action to take")
 
-    class Config:
-        """Pydantic config."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "risk_score": 72,
                 "risk_factors": [
@@ -152,3 +149,4 @@ class RiskAssessment(BaseModel):
                 "suggested_action": "escalate_for_review"
             }
         }
+    )

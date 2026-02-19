@@ -18,7 +18,7 @@ from typing import (
     Literal,
 )
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 from typing_extensions import TypedDict
 
 # LangGraph annotation for message reduction
@@ -164,9 +164,7 @@ class CustomerProfile(BaseModel):
     typical_countries: list[str] = Field(default_factory=list, description="Typical transaction countries")
     registered_devices: list[str] = Field(default_factory=list, description="Known device IDs")
 
-    class Config:
-        """Pydantic configuration."""
-        use_enum_values = True
+    model_config = ConfigDict(use_enum_values=True)
 
 
 class TransactionInfo(BaseModel):
@@ -211,9 +209,12 @@ class DeviceInfo(BaseModel):
     is_emulator: bool = Field(default=False, description="Whether device appears to be an emulator")
     is_rooted: bool = Field(default=False, description="Whether device is rooted/jailbroken")
 
-    class Config:
-        """Pydantic configuration."""
-        json_encoders = {datetime: lambda v: v.isoformat()}
+    model_config = ConfigDict()
+
+    @field_serializer("first_seen", "last_seen", when_used="json")
+    def serialize_datetime(self, v: datetime | None) -> str | None:
+        """Serialize datetime to ISO format string."""
+        return v.isoformat() if v else None
 
 
 class WatchlistHit(BaseModel):
@@ -321,6 +322,14 @@ class FraudTriageState(TypedDict, total=False):
     transaction_ip: str | None
     rule_id: str | None
     alert_reason: str | None
+    # Legacy field for backward compatibility with nodes.py
+    alert_data: dict[str, Any] | None
+    # Legacy fields for backward compatibility
+    next_action: str | None  # Next action to take
+    human_review_required: bool  # Flag for human-in-the-loop
+    human_decision: str | None  # Legacy field, use human_review_decision
+    human_reasoning: str | None  # Legacy field, use human_review_reasoning
+    device_fingerprint: DeviceInfo | dict[str, Any] | None  # Alias for device_info
 
     # -------------------------------------------------------------------------
     # Message History (LangGraph automatic reduction)
@@ -429,10 +438,9 @@ class FraudAlertRequest(BaseModel):
     severity: str = Field(default="medium", description="Initial severity assessment")
     metadata: dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 
-    class Config:
-        """Pydantic configuration."""
-        use_enum_values = True
-        json_schema_extra = {
+    model_config = ConfigDict(
+        use_enum_values=True,
+        json_schema_extra={
             "example": {
                 "alert_type": "location_mismatch",
                 "customer_id": "CUST-41256",
@@ -451,6 +459,7 @@ class FraudAlertRequest(BaseModel):
                 "severity": "high",
             }
         }
+    )
 
 
 class FraudAlertResponse(BaseModel):
@@ -462,9 +471,12 @@ class FraudAlertResponse(BaseModel):
     message: str = Field(..., description="Response message")
     submitted_at: datetime = Field(default_factory=datetime.utcnow, description="Submission timestamp")
 
-    class Config:
-        """Pydantic configuration."""
-        json_encoders = {datetime: lambda v: v.isoformat()}
+    model_config = ConfigDict()
+
+    @field_serializer("submitted_at", when_used="json")
+    def serialize_submitted_at(self, v: datetime) -> str:
+        """Serialize datetime to ISO format string."""
+        return v.isoformat()
 
 
 class TriageResultResponse(BaseModel):
@@ -504,11 +516,9 @@ class TriageResultResponse(BaseModel):
     processing_duration_ms: int = Field(..., description="Processing duration in milliseconds")
     model_used: str | None = Field(None, description="LLM model used")
 
-    class Config:
-        """Pydantic configuration."""
-        use_enum_values = True
-        json_encoders = {datetime: lambda v: v.isoformat()}
-        json_schema_extra = {
+    model_config = ConfigDict(
+        use_enum_values=True,
+        json_schema_extra={
             "example": {
                 "alert_id": "SAMPLE-001",
                 "status": "reviewed",
@@ -536,6 +546,12 @@ class TriageResultResponse(BaseModel):
                 "model_used": "glm-4-plus"
             }
         }
+    )
+
+    @field_serializer("processing_started", "processing_completed", when_used="json")
+    def serialize_datetime(self, v: datetime) -> str:
+        """Serialize datetime to ISO format string."""
+        return v.isoformat()
 
 
 class HumanReviewRequest(BaseModel):
@@ -553,10 +569,9 @@ class HumanReviewRequest(BaseModel):
     tags: list[str] = Field(default_factory=list, description="Tags for categorization")
     additional_notes: str | None = Field(None, description="Additional notes or comments")
 
-    class Config:
-        """Pydantic configuration."""
-        use_enum_values = True
-        json_schema_extra = {
+    model_config = ConfigDict(
+        use_enum_values=True,
+        json_schema_extra={
             "example": {
                 "reviewer_id": "ANALYST-001",
                 "reviewer_name": "Jane Smith",
@@ -568,6 +583,7 @@ class HumanReviewRequest(BaseModel):
                 "additional_notes": "Case created for follow-up investigation. Block card."
             }
         }
+    )
 
 
 class HumanReviewResponse(BaseModel):
@@ -580,10 +596,12 @@ class HumanReviewResponse(BaseModel):
     message: str = Field(..., description="Response message")
     reviewed_at: datetime = Field(default_factory=datetime.utcnow, description="Review timestamp")
 
-    class Config:
-        """Pydantic configuration."""
-        use_enum_values = True
-        json_encoders = {datetime: lambda v: v.isoformat()}
+    model_config = ConfigDict(use_enum_values=True)
+
+    @field_serializer("reviewed_at", when_used="json")
+    def serialize_reviewed_at(self, v: datetime) -> str:
+        """Serialize datetime to ISO format string."""
+        return v.isoformat()
 
 
 class AlertStatusResponse(BaseModel):
@@ -599,9 +617,12 @@ class AlertStatusResponse(BaseModel):
     requires_human_review: bool = Field(..., description="Whether human review is required")
     risk_score: float | None = Field(None, description="Risk score if analysis complete")
 
-    class Config:
-        """Pydantic configuration."""
-        json_encoders = {datetime: lambda v: v.isoformat()}
+    model_config = ConfigDict()
+
+    @field_serializer("created_at", "updated_at", when_used="json")
+    def serialize_datetime(self, v: datetime) -> str:
+        """Serialize datetime to ISO format string."""
+        return v.isoformat()
 
 
 # =============================================================================
@@ -680,6 +701,13 @@ def create_initial_state(
         "workflow_version": "0.1.0",
         "tools_used": None,
         "checkpoint_data": None,
+        # Legacy fields for backward compatibility
+        "alert_data": None,
+        "next_action": "gather_context",
+        "human_review_required": False,
+        "human_decision": None,
+        "human_reasoning": None,
+        "device_fingerprint": None,
     }
 
     # Add optional fields from kwargs
