@@ -385,6 +385,38 @@ Third-party library wrappers often have hidden dependencies. Check the library's
 
 ---
 
+### Issue 17: CLIP vs Text Embedding Dimension Mismatch
+
+**Date:** 2026-02-19
+
+**Problem:**
+`ValueError: operands could not be broadcast together with shapes (384,) (512,)`
+
+**Root Cause:**
+The multimodal retriever tried to combine CLIP image embeddings (512 dimensions) with text embeddings from `sentence-transformers/all-MiniLM-L6-v2` (384 dimensions):
+```python
+combined = (text_embedding + image_embedding) / 2  # Fails: different shapes
+```
+
+**Solution:**
+Disable CLIP and use text-based image search only:
+```python
+retriever = create_retriever(enable_clip=False)
+```
+
+**Proper Solutions (TODO):**
+1. Use CLIP for both text and image embeddings (consistent 512d)
+2. Project both embeddings to a common dimension
+3. Use separate indices for different modalities
+
+**Lesson:**
+When combining embeddings from different models, always verify dimensions match. Different embedding models produce different vector sizes:
+- `all-MiniLM-L6-v2`: 384 dimensions
+- `all-mpnet-base-v2`: 768 dimensions
+- CLIP `ViT-B/32`: 512 dimensions
+
+---
+
 ## Best Practices Identified
 
 ### 1. Module Exports
