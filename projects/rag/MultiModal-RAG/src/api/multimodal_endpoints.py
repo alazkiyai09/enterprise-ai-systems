@@ -41,6 +41,7 @@ from ..multimodal import (
     ImageCitation,
     TableCitation,
     TextCitation,
+    create_retriever,
 )
 
 logger = logging.getLogger(__name__)
@@ -128,17 +129,45 @@ class TableDataResponse(BaseModel):
 # ==================== Dependencies ====================
 
 def get_retriever() -> MultiModalRetriever:
-    """Get retriever instance."""
+    """Get retriever instance with lazy initialization."""
+    global retriever
     if retriever is None:
-        raise HTTPException(status_code=500, detail="Retriever not initialized")
+        logger.info("Initializing MultiModalRetriever...")
+        retriever = create_retriever()
     return retriever
 
 
 def get_rag_chain() -> MultiModalRAGChain:
-    """Get RAG chain instance."""
+    """Get RAG chain instance with lazy initialization."""
+    global rag_chain
     if rag_chain is None:
-        raise HTTPException(status_code=500, detail="RAG chain not initialized")
+        logger.info("Initializing MultiModalRAGChain...")
+        # Import the text RAG chain from main module
+        from src.api.main import rag_chain as text_rag_chain
+        # Create multimodal RAG chain
+        rag_chain = MultiModalRAGChain(
+            retriever=get_retriever(),
+            text_llm=text_rag_chain,  # Use text RAG chain for text generation
+        )
     return rag_chain
+
+
+def get_image_processor() -> ImageProcessor:
+    """Get image processor instance with lazy initialization."""
+    global image_processor
+    if image_processor is None:
+        logger.info("Initializing ImageProcessor...")
+        image_processor = ImageProcessor()
+    return image_processor
+
+
+def get_table_extractor() -> TableExtractor:
+    """Get table extractor instance with lazy initialization."""
+    global table_extractor
+    if table_extractor is None:
+        logger.info("Initializing TableExtractor...")
+        table_extractor = TableExtractor()
+    return table_extractor
 
 
 # ==================== Query Endpoints ====================
