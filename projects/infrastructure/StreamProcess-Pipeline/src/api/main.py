@@ -15,7 +15,7 @@ import os
 from datetime import datetime
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, status, Request, Depends, Form, Body
+from fastapi import FastAPI, HTTPException, status, Request, Depends, Form, Body, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -114,8 +114,9 @@ user_store = InMemoryUserStore()
 @app.post("/auth/register", tags=["Authentication"])
 @limiter.limit("10/hour")
 async def register(
-    user_data: UserCreate,
     request: Request,
+    response: Response,
+    user_data: UserCreate,
 ):
     """Register a new user."""
     try:
@@ -139,9 +140,10 @@ async def register(
 @app.post("/auth/login", tags=["Authentication"])
 @limiter.limit("20/minute")
 async def login(
+    request: Request,
+    response: Response,
     username: str = Form(...),
     password: str = Form(...),
-    request: Request = None,
 ):
     """Login and receive access token."""
     from shared.auth import authenticate_user, login_user
@@ -161,8 +163,9 @@ async def login(
 @app.post("/auth/refresh", tags=["Authentication"])
 @limiter.limit("30/minute")
 async def refresh(
+    request: Request,
+    response: Response,
     refresh_token: str = Body(..., embed=True),
-    request: Request = None,
 ):
     """Refresh access token."""
     from shared.auth import refresh_user_token
@@ -179,7 +182,7 @@ async def refresh(
 
 @app.get("/auth/me", tags=["Authentication"])
 @limiter.limit("60/minute")
-async def get_current_user_info(current_user: TokenData = Depends(get_current_user)):
+async def get_current_user_info(request: Request, response: Response, current_user: TokenData = Depends(get_current_user)):
     """Get current user information."""
     user = await user_store.get_user_by_id(current_user.user_id)
     if not user:
@@ -187,11 +190,13 @@ async def get_current_user_info(current_user: TokenData = Depends(get_current_us
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found"
         )
+    # Handle both Role enum and string values
+    role_value = user.role.value if hasattr(user.role, 'value') else user.role
     return {
         "id": user.id,
         "username": user.username,
         "email": user.email,
-        "role": user.role.value,
+        "role": role_value,
         "is_active": user.is_active,
     }
 
@@ -209,7 +214,7 @@ app.include_router(metrics_router)
 
 @app.get("/", tags=["Root"])
 @limiter.limit("60/minute")
-async def root(request: Request):
+async def root(request: Request, response: Response):
     """
     Root endpoint.
 
@@ -232,7 +237,7 @@ async def root(request: Request):
 
 @app.get("/health", tags=["Health"])
 @limiter.limit("60/minute")
-async def health_check(request: Request):
+async def health_check(request: Request, response: Response):
     """
     Health check endpoint.
 
@@ -263,10 +268,10 @@ def main():
 
     uvicorn.run(
         "src.api.main:app",
-        host=settings.API_HOST,
-        port=settings.API_PORT,
+        host=settings.api.host,
+        port=settings.api.port,
         reload=True,
-        log_level=settings.LOG_LEVEL.lower(),
+        log_level=settings.api.log_level.lower(),
     )
 
 

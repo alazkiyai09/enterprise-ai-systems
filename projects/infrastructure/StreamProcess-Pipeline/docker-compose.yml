@@ -21,7 +21,7 @@ services:
       POSTGRES_MAX_CONNECTIONS: "200"
       POSTGRES_WORK_MEM: "16MB"
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       # Init scripts
@@ -51,7 +51,7 @@ services:
       --save 300 10
       --save 60 10000
     ports:
-      - "6379:6379"
+      - "6380:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -77,11 +77,11 @@ services:
       # Persistence
       ANONYMIZED_TELEMETRY: "False"
     ports:
-      - "8001:8000"
+      - "8002:8000"
     volumes:
       - chroma_data:/chroma/chroma
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/8000' || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -147,9 +147,24 @@ services:
 
       # CORS
       CORS_ORIGINS: '["http://localhost:3000","http://localhost:8000","http://127.0.0.1:3000"]'
+
+      # Security
+      JWT_SECRET_KEY: "streamprocess-dev-secret-key-change-in-production-2024"
+
+      # LLM Configuration
+      LLM_PROVIDER: "glm"
+      LLM_MODEL: "glm-5"
+      LLM_API_KEY: "${LLM_API_KEY:-}"
+      LLM_BASE_URL: "https://api.z.ai/api/anthropic"
+      LLM_TEMPERATURE: "0.7"
+      LLM_MAX_TOKENS: "2000"
+      LLM_TIMEOUT: "60"
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     ports:
       - "8000:8000"   # API
-      - "9090:9090"   # Metrics
+      - "9092:9090"   # Metrics
     volumes:
       - ./src:/app/src:ro
       - ./data:/app/data
@@ -284,11 +299,10 @@ services:
       - '--storage.tsdb.retention.time=15d'
       - '--web.enable-lifecycle'
     ports:
-      - "9091:9090"
+      - "9093:9090"
     volumes:
       - ./k8s/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
-    command: ["prometheus", "--config.file=/etc/prometheus/prometheus.yml"]
     networks:
       - streamprocess
 
@@ -307,7 +321,7 @@ services:
       GF_SERVER_ROOT_URL: "http://localhost:3000"
       GF_ANALYTICS_REPORTING_ENABLED: "false"
     ports:
-      - "3000:3000"
+      - "3001:3000"
     volumes:
       - grafana_data:/var/lib/grafana
       - ./scripts/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro

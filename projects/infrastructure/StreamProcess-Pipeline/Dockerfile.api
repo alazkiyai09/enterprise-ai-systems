@@ -30,9 +30,10 @@ ENV PATH="/opt/venv/bin:$PATH"
 # Copy requirements first for better caching
 COPY requirements.txt .
 
-# Install Python dependencies
+# Install Python dependencies with CPU-only PyTorch
 RUN pip install --upgrade pip setuptools wheel && \
-    pip install -r requirements.txt
+    pip install --extra-index-url https://download.pytorch.org/whl/cpu \
+    -r requirements.txt
 
 # ============================================================================
 # Stage 2: Runtime
@@ -48,11 +49,14 @@ ARG APP_GID=1000
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PATH="/opt/venv/bin:$PYTHONPATH" \
-    PYTHONPATH="/app:$PYTHONPATH" \
+    PATH="/opt/venv/bin:$PATH" \
+    PYTHONPATH="/app" \
     APP_USER=${APP_USER} \
     APP_UID=${APP_UID} \
-    APP_GID=${APP_GID}
+    APP_GID=${APP_GID} \
+    TRANSFORMERS_CACHE="/app/cache/models" \
+    HF_HOME="/app/cache/models" \
+    PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
 
 # Install runtime dependencies only
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -75,14 +79,15 @@ RUN mkdir -p /app/data /app/cache /app/logs /app/tmp && \
 
 # Copy application code
 COPY --chown=${APP_USER}:${APP_USER} src/ /app/src/
+COPY --chown=${APP_USER}:${APP_USER} shared/ /app/shared/
 COPY --chown=${APP_USER}:${APP_USER} pyproject.toml .
 
 # Switch to non-root user
 USER ${APP_USER}
 
-# Health check
+# Health check (using Python urllib instead of curl)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
 
 # Expose ports
 EXPOSE 8000 9090

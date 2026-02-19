@@ -8,7 +8,7 @@ import asyncio
 import time
 from collections import deque
 from datetime import datetime
-from typing import Any, Callable, Deque, Dict, List, Optional
+from typing import Any, AsyncGenerator, Callable, Deque, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
