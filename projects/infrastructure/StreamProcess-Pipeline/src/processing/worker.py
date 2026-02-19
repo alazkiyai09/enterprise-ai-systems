@@ -440,7 +440,7 @@ async def _fetch_batch_records(session: AsyncSession, batch_id: str) -> List[Dic
                 "campaign_id": r.campaign_id,
                 "user_id": r.user_id,
                 "content": r.content,
-                "metadata": r.metadata,
+                "metadata": r.event_metadata,
             }
             for r in records
         ]

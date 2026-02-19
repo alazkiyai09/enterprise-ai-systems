@@ -39,7 +39,7 @@ class EventRecord(Base):
     campaign_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     user_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    metadata: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    event_metadata: Mapped[dict] = mapped_column("metadata", JSON, nullable=False, default=dict)
 
     # Embedding-related fields
     embedding_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)

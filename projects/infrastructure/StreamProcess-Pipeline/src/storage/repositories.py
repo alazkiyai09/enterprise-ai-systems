@@ -63,7 +63,7 @@ class EventRepository:
             campaign_id=campaign_id,
             user_id=user_id,
             content=content,
-            metadata=metadata,
+            event_metadata=metadata,
             batch_id=batch_id,
         )
 
