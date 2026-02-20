@@ -38,6 +38,7 @@ class GuardResult:
     confidence: float
     details: str
     sanitized_input: Optional[str] = None
+    metadata: Optional[dict] = None
 
 
 class PromptInjectionDetector:

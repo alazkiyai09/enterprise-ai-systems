@@ -10,6 +10,12 @@ This module provides:
 - PII detection and redaction
 - Jailbreak detection
 - Output filtering
+
+Security Features:
+- Request body size limits
+- Rate limiting
+- Production environment validation
+- Secure CORS configuration
 """
 
 import logging
@@ -67,6 +73,89 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================
+# Security Configuration
+# ============================================================
+
+# Maximum request body size (10MB)
+MAX_REQUEST_BODY_SIZE = 10 * 1024 * 1024
+
+# Known weak secret patterns that should never be used in production
+WEAK_SECRET_PATTERNS = [
+    "change-in-production",
+    "changeme",
+    "secret",
+    "password",
+    "aiguard-super-secret",
+    "aiguard-secret-key",
+    "not-for-production",
+]
+
+
+def validate_production_security():
+    """
+    Validate security configuration for production environment.
+
+    Raises:
+        RuntimeError: If critical security issues are detected
+    """
+    environment = os.getenv("ENVIRONMENT", "development").lower()
+
+    # Only enforce strict validation in production
+    if environment not in ("production", "prod"):
+        logger.info(f"Running in {environment} mode - security validation relaxed")
+        return
+
+    logger.info("Running in PRODUCTION mode - enforcing strict security validation")
+
+    # Check SECRET_KEY is set
+    secret_key = os.getenv("SECRET_KEY", "")
+    if not secret_key:
+        raise RuntimeError(
+            "CRITICAL: SECRET_KEY environment variable must be set in production. "
+            "Generate with: python -c \"import secrets; print(secrets.token_urlsafe(32))\""
+        )
+
+    # Check for weak secrets
+    secret_lower = secret_key.lower()
+    for pattern in WEAK_SECRET_PATTERNS:
+        if pattern in secret_lower:
+            raise RuntimeError(
+                f"CRITICAL: SECRET_KEY contains weak pattern '{pattern}'. "
+                "Generate a secure random key for production."
+            )
+
+    # Check SECRET_KEY length
+    if len(secret_key) < 32:
+        raise RuntimeError(
+            f"CRITICAL: SECRET_KEY is too short ({len(secret_key)} chars). "
+            "Must be at least 32 characters for production."
+        )
+
+    # Warn about InMemoryUserStore in production
+    logger.warning(
+        "SECURITY WARNING: InMemoryUserStore is being used in production. "
+        "All user data will be lost on container restart. "
+        "Configure a database-backed UserStore for production."
+    )
+
+    # Check CORS origins are not localhost in production
+    cors_origins = os.getenv("CORS_ORIGINS", "")
+    if "localhost" in cors_origins or "127.0.0.1" in cors_origins:
+        logger.warning(
+            "SECURITY WARNING: CORS_ORIGINS contains localhost in production. "
+            "This should be set to actual frontend domains."
+        )
+
+
+# Run production security validation on startup
+try:
+    validate_production_security()
+except RuntimeError as e:
+    logger.error(f"Security validation failed: {e}")
+    raise
+
+
+# ============================================================
 # Pydantic Models
 # ============================================================
 
@@ -78,6 +167,7 @@ class ScanRequest(BaseModel):
     enable_jailbreak_check: bool = Field(True, description="Enable jailbreak detection")
     enable_encoding_check: bool = Field(True, description="Enable encoding attack detection")
     redact_pii: bool = Field(True, description="Redact detected PII")
+    redaction_mode: str = Field("full", description="Redaction mode: full, partial, token, mask, hash")
 
 
 class ScanResponse(BaseModel):
@@ -127,22 +217,72 @@ Protect your LLM applications from:
     redoc_url="/redoc",
 )
 
+
+# ============================================================
+# Request Size Limit Middleware
+# ============================================================
+
+@app.middleware("http")
+async def limit_request_size(request: Request, call_next):
+    """
+    Middleware to limit request body size.
+
+    Prevents DoS attacks via large request bodies.
+    """
+    if request.method in ("POST", "PUT", "PATCH"):
+        content_length = request.headers.get("content-length")
+        if content_length:
+            try:
+                length = int(content_length)
+                if length > MAX_REQUEST_BODY_SIZE:
+                    logger.warning(
+                        f"Request body too large: {length} bytes (max: {MAX_REQUEST_BODY_SIZE})"
+                    )
+                    return JSONResponse(
+                        status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                        content={
+                            "error": "Request entity too large",
+                            "detail": f"Request body exceeds maximum size of {MAX_REQUEST_BODY_SIZE} bytes",
+                            "max_size": MAX_REQUEST_BODY_SIZE,
+                        }
+                    )
+            except ValueError:
+                pass
+
+    return await call_next(request)
+
+
 # ============================================================
 # CORS Middleware
 # ============================================================
 
 origins = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:8501").split(",")
 
+# Explicit allowed headers (not wildcard for better security)
+ALLOWED_HEADERS = [
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "content-type",
+    "dnt",
+    "origin",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
+    "x-api-key",
+    "x-user-id",
+]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
+    allow_headers=ALLOWED_HEADERS,
 )
 
 # Install security filter for logs
-install_security_filter()
+install_security_filter(logger)
 
 # Register error handlers
 register_error_handlers(app)
@@ -152,6 +292,7 @@ app.add_exception_handler(RateLimitExceeded, rate_limit_exception_handler)
 
 # Get settings
 settings = get_settings()
+
 
 # ============================================================
 # Global Detectors
@@ -275,7 +416,7 @@ async def refresh(
 
 @app.get("/auth/me", tags=["Authentication"])
 @limiter.limit("60/minute")
-async def get_current_user_info(current_user: TokenData = Depends(get_current_user)):
+async def get_current_user_info(request: Request, current_user: TokenData = Depends(get_current_user)):
     """Get current user information."""
     user = await user_store.get_user_by_id(current_user.user_id)
     if not user:
@@ -298,7 +439,7 @@ async def get_current_user_info(current_user: TokenData = Depends(get_current_us
 
 @app.post("/scan", response_model=ScanResponse, tags=["Security"])
 @limiter.limit("30/minute")
-async def scan_text(request: ScanRequest, http_request: Request):
+async def scan_text(request: Request, scan_request: ScanRequest):
     """
     Scan text for security threats.
 
@@ -312,13 +453,13 @@ async def scan_text(request: ScanRequest, http_request: Request):
         "is_safe": True,
         "threats_found": 0,
         "checks": {},
-        "sanitized_text": request.text,
+        "sanitized_text": scan_request.text,
     }
 
-    sanitized = request.text
+    sanitized = scan_request.text
 
     # Prompt Injection Detection
-    if request.enable_injection_check:
+    if scan_request.enable_injection_check:
         detector = get_injection_detector()
         injection_result = detector.detect(sanitized)
         results["checks"]["injection"] = {
@@ -333,7 +474,7 @@ async def scan_text(request: ScanRequest, http_request: Request):
         sanitized = injection_result.sanitized_input
 
     # Jailbreak Detection
-    if request.enable_jailbreak_check:
+    if scan_request.enable_jailbreak_check:
         detector = get_jailbreak_detector()
         jailbreak_result = detector.detect(sanitized)
         results["checks"]["jailbreak"] = {
@@ -348,7 +489,7 @@ async def scan_text(request: ScanRequest, http_request: Request):
         sanitized = jailbreak_result.sanitized_input
 
     # Encoding Attack Detection
-    if request.enable_encoding_check:
+    if scan_request.enable_encoding_check:
         detector = get_injection_detector()
         has_encoding, encoding_type = detector.check_encoding_attacks(sanitized)
         results["checks"]["encoding"] = {
@@ -360,11 +501,11 @@ async def scan_text(request: ScanRequest, http_request: Request):
             results["threats_found"] += 1
 
     # PII Detection
-    if request.enable_pii_check:
+    if scan_request.enable_pii_check:
         detector = get_pii_detector()
-        if request.redact_pii:
+        if scan_request.redact_pii:
             # Update redaction mode
-            detector.redaction_mode = request.redaction_mode
+            detector.redaction_mode = scan_request.redaction_mode
         has_pii, pii_matches = detector.detect(sanitized)
         redacted = detector.redact(sanitized)
         results["checks"]["pii"] = {
@@ -381,7 +522,7 @@ async def scan_text(request: ScanRequest, http_request: Request):
 
 @app.post("/pii", response_model=PIIResponse, tags=["Security"])
 @limiter.limit("30/minute")
-async def detect_pii(request: PIIRequest, http_request: Request):
+async def detect_pii(request: Request, pii_request: PIIRequest):
     """
     Detect and redact PII in text.
 
@@ -394,10 +535,10 @@ async def detect_pii(request: PIIRequest, http_request: Request):
     - Dates of birth
     """
     detector = get_pii_detector()
-    detector.redaction_mode = request.redaction_mode
+    detector.redaction_mode = pii_request.redaction_mode
 
-    has_pii, pii_matches = detector.detect(request.text)
-    redacted = detector.redact(request.text)
+    has_pii, pii_matches = detector.detect(pii_request.text)
+    redacted = detector.redact(pii_request.text)
 
     return PIIResponse(
         has_pii=has_pii,
@@ -421,16 +562,65 @@ async def health_check(request: Request):
     Health check endpoint.
 
     Returns the health status of the API and its components.
+    Returns 503 if critical components are not ready.
     """
-    return {
-        "status": "healthy",
+    components = {
+        "api": "healthy",
+        "injection_detector": "ready" if _injection_detector else "not_loaded",
+        "pii_detector": "ready" if _pii_detector else "not_loaded",
+        "jailbreak_detector": "ready" if _jailbreak_detector else "not_loaded",
+    }
+
+    # Check if all critical components are ready
+    # For a security service, all detectors should be available
+    all_ready = all(
+        v in ("ready", "healthy") for v in components.values()
+    )
+
+    response_data = {
+        "status": "healthy" if all_ready else "degraded",
         "timestamp": datetime.utcnow().isoformat(),
-        "components": {
-            "api": "healthy",
-            "injection_detector": "ready" if _injection_detector else "not_loaded",
-            "pii_detector": "ready" if _pii_detector else "not_loaded",
-            "jailbreak_detector": "ready" if _jailbreak_detector else "not_loaded",
-        },
+        "components": components,
+    }
+
+    if not all_ready:
+        logger.warning(f"Health check returning degraded status: {components}")
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content=response_data
+        )
+
+    return response_data
+
+
+@app.get("/ready", tags=["Health"])
+@limiter.limit("60/minute")
+async def readiness_check(request: Request):
+    """
+    Readiness check endpoint for Kubernetes/container orchestration.
+
+    Returns 200 only when all components are initialized and ready.
+    Returns 503 if any component is not ready.
+    """
+    # Force initialization of detectors to check readiness
+    try:
+        get_injection_detector()
+        get_pii_detector()
+        get_jailbreak_detector()
+    except Exception as e:
+        logger.error(f"Readiness check failed: {e}")
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "status": "not_ready",
+                "error": str(e),
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+        )
+
+    return {
+        "status": "ready",
+        "timestamp": datetime.utcnow().isoformat(),
     }
 
 
@@ -448,10 +638,12 @@ async def root(request: Request):
         "status": "running",
         "docs": "/docs",
         "health": "/health",
+        "ready": "/ready",
         "endpoints": {
             "scan": "/scan",
             "pii": "/pii",
             "health": "/health",
+            "ready": "/ready",
         },
     }
 

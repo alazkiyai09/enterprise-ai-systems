@@ -112,7 +112,7 @@ class JailbreakDetector:
     SIMULATION_PATTERNS = [
         re.compile(r"(?i)(this\s+is\s+a?\s+(fictional|hypothetical|simulated|role-play?\s*)?\s*(scenario|simulation|story))"),
         re.compile(r"(?i)(pretend\s+(we\s+)?(we'?re?\s+)?in\s+a?\s+(game|simulation|story|scenario))"),
-        re.compile(r("(?i)(imagine\s+(that\s+)?you'?re?\s+(in|playing)\s+a?\s+(character|role)(\s+that)?)"),
+        re.compile(r"(?i)(imagine\s+(that\s+)?you'?re?\s+(in|playing)\s+a?\s+(character|role)(\s+that)?)")
     ]
 
     ABOVE_RULES_PATTERNS = [

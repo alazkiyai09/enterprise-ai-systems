@@ -1,0 +1,85 @@
+# ============================================================
+# AIGuard Docker Ignore
+# ============================================================
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+*.egg
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.docker/
+.dockerignore
+
+# Documentation
+docs/
+*.md
+README*
+CONTRIBUTING*
+CHANGELOG*
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+Jenkinsfile
+
+# Cache and logs
+cache/
+logs/
+*.log
+*.tmp
+
+# Local development
+.env.local
+.env.*.local
+*.bak
+
+# Test files
+tests/
+test_*.py
+*_test.py
+
+# Development configs
+.pre-commit-config.yaml
+.mypy.ini
+ruff.toml
+black.toml
+pyproject.toml

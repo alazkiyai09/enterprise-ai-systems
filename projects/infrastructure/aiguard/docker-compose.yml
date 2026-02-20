@@ -1,0 +1,136 @@
+# ============================================================
+# AIGuard Docker Compose Configuration
+# ============================================================
+# Production-ready Docker Compose for AIGuard security service
+# Features:
+# - DNS configuration (8.8.8.8 for reliability)
+# - Health checks
+# - Resource limits
+# - Automatic restart
+# - Logging configuration
+# - Security hardening
+# ============================================================
+
+version: "3.8"
+
+services:
+  aiguard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    image: aiguard:1.0.0
+    container_name: aiguard-api
+    restart: unless-stopped
+
+    # DNS configuration (avoid DNS resolution issues)
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+
+    # Port mapping
+    ports:
+      - "8000:8000"
+
+    # Environment variables
+    environment:
+      # API Configuration
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+      - LOG_LEVEL=INFO
+
+      # SECURITY: SECRET_KEY must be set via environment variable
+      # No default fallback - fail fast if not configured
+      - SECRET_KEY=${SECRET_KEY:?SECRET_KEY must be set}
+
+      # JWT Configuration
+      - JWT_ALGORITHM=HS256
+      - ACCESS_TOKEN_EXPIRE_MINUTES=30
+      - REFRESH_TOKEN_EXPIRE_DAYS=7
+
+      # Rate Limiting
+      - RATE_LIMIT_ENABLED=true
+      - RATE_LIMIT_REQUESTS=100
+      - RATE_LIMIT_WINDOW=60
+
+      # GLM API Configuration (optional, for LLM-based detection)
+      - GLM_API_KEY=${GLM_API_KEY:-}
+      - GLM_API_BASE_URL=${GLM_API_BASE_URL:-https://api.z.ai/api/anthropic}
+      - GLM_MODEL=${GLM_MODEL:-glm-5}
+
+      # AIGuard-specific settings (with AIGUARD_ prefix)
+      - AIGUARD_ENABLE_INJECTION_DETECTION=true
+      - AIGUARD_ENABLE_PII_DETECTION=true
+      - AIGUARD_ENABLE_PII_REDACTION=true
+      - AIGUARD_ENABLE_OUTPUT_FILTERING=true
+      - AIGUARD_ENABLE_ENCODING_DETECTION=true
+      - AIGUARD_INJECTION_THRESHOLD=0.75
+      - AIGUARD_JAILBREAK_THRESHOLD=0.80
+      - AIGUARD_PII_CONFIDENCE_THRESHOLD=0.75
+      - AIGUARD_TOXICITY_THRESHOLD=0.50
+      - AIGUARD_BLOCK_ON_DETECTION=true
+      - AIGUARD_RETURN_DETAILS=true
+      - AIGUARD_LOG_BLOCKED_REQUESTS=true
+      - AIGUARD_EMBEDDING_MODEL=all-MiniLM-L6-v2
+      - AIGUARD_SPACY_MODEL=en_core_web_sm
+      - AIGUARD_DEVICE=cpu
+      - AIGUARD_MAX_PROMPT_LENGTH=10000
+      - AIGUARD_MAX_OUTPUT_LENGTH=50000
+
+      # CORS Configuration
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://localhost:8501}
+
+      # Environment mode
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+
+    # Volume mounts for persistence
+    volumes:
+      - aiguard-cache:/app/cache
+      - aiguard-logs:/app/logs
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
+        reservations:
+          cpus: "0.5"
+          memory: 1G
+
+    # Health check configuration
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+
+    # Read-only root filesystem with tmpfs for writable paths
+    read_only: true
+    tmpfs:
+      - /tmp:size=100M,mode=1777
+
+# Named volumes for persistence
+volumes:
+  aiguard-cache:
+    driver: local
+  aiguard-logs:
+    driver: local
+
+# Network configuration
+networks:
+  default:
+    name: aiguard-network
+    driver: bridge

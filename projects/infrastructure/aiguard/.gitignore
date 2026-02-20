@@ -47,6 +47,9 @@ cover/
 
 # Environments
 .env
+.env.docker
+.env.local
+.env.*.local
 .venv
 env/
 venv/
