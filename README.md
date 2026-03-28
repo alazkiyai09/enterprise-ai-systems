@@ -1,7 +1,9 @@
 > ⚠️ **ARCHIVED** — This monolithic repo has been split into focused modules:
 > - [enterprise-agents](https://github.com/alazkiyai09/enterprise-agents) — Multi-agent orchestration
 > - [enterprise-ai-infra](https://github.com/alazkiyai09/enterprise-ai-infra) — Infrastructure & deployment
-> - [enterprise-rag](https://github.com/alazkiyai09/enterprise-rag) — RAG retrieval platform\n\n<div align="center">
+> - [enterprise-rag](https://github.com/alazkiyai09/enterprise-rag) — RAG retrieval platform
+
+<div align="center">
 
 # 🤖 Enterprise AI Portfolio
 
